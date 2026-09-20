@@ -42,23 +42,23 @@ def propose_name_links(sections: Iterable[Section], chunks: Iterable[Chunk]) -> 
     identifier. Bare method names match, which is deliberately permissive —
     precision is measured against the fixture corpus before it is tuned.
     """
-    chunks = list(chunks)
+    candidates = [(chunk, _names_of(chunk)) for chunk in chunks]
     links: list[Link] = []
     for section in sections:
-        identifiers = _identifiers(section)
+        identifiers = _identifiers_in(section)
         links.extend(
             Link(section=section.id, chunk=chunk.id, mechanism="name")
-            for chunk in chunks
-            if _names(identifiers, chunk)
+            for chunk, names in candidates
+            if names & identifiers
         )
     return links
 
 
-def _names(identifiers: set[str], chunk: Chunk) -> bool:
-    return chunk.qualname in identifiers or chunk.qualname.rsplit(".", 1)[-1] in identifiers
+def _names_of(chunk: Chunk) -> set[str]:
+    return {chunk.qualname, chunk.qualname.rsplit(".", 1)[-1]}
 
 
-def _identifiers(section: Section) -> set[str]:
+def _identifiers_in(section: Section) -> set[str]:
     text = "\n".join((*section.heading_path, section.text))
     found: set[str] = set()
     for match in _IDENTIFIER.finditer(text):

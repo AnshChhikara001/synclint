@@ -27,7 +27,6 @@ class Chunk:
 
     @property
     def id(self) -> str:
-        """The chunk's identity: its file path plus its qualified name."""
         return f"{self.path}::{self.qualname}"
 
     def to_dict(self) -> dict[str, Any]:
@@ -64,6 +63,9 @@ def _walk(body: list[ast.stmt], path: str, prefix: str) -> Iterator[Chunk]:
     for node in body:
         if not isinstance(node, Definition):
             continue
+        # TODO: definitions nested in `if` or `try` blocks are not reached at
+        # all, and two definitions sharing a qualified name in one file collide
+        # on one id. The fixture corpus decides how much either costs.
         qualname = f"{prefix}{node.name}"
         yield _chunk(node, path, qualname)
         # Descend into classes but not into functions: a function-local

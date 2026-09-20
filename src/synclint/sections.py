@@ -59,7 +59,7 @@ def split_sections(markdown: str, path: str) -> list[Section]:
     headings: list[tuple[int, str]] = []
     body: list[str] = []
 
-    def flush() -> None:
+    def emit_section() -> None:
         text = "\n".join(body).strip()
         # A section with no prose cannot be inaccurate, so it is not indexed.
         if text:
@@ -79,12 +79,12 @@ def split_sections(markdown: str, path: str) -> list[Section]:
         if not heading:
             body.append(line)
             continue
-        flush()
+        emit_section()
         body = []
         level = len(heading.group(1))
         while headings and headings[-1][0] >= level:
             headings.pop()
         headings.append((level, heading.group(2)))
-    flush()
+    emit_section()
 
     return sections

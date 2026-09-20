@@ -16,6 +16,10 @@ _Avoid_: block, fragment, passage, doc
 A recorded relationship asserting that a section describes a chunk.
 _Avoid_: edge, mapping, association, reference
 
+**Mechanism**:
+What proposed a link — name matching, or embedding similarity. Recorded on the link so that each one's separate contribution to recall can be measured.
+_Avoid_: source, method, strategy, provenance
+
 **Index**:
 The complete set of chunks, sections, and links for a repository at a point in time.
 _Avoid_: graph, store, database, embedding store

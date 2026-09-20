@@ -56,8 +56,7 @@ def test_records_classes_and_methods_by_qualified_name(tmp_path: Path) -> None:
 
     index = build_index(tmp_path)
 
-    # `decode` is absent: a function-local definition is unreachable from
-    # documentation, so indexing it only adds noise to name matching.
+    # `decode` is absent: function-local definitions are not chunks.
     assert [chunk.id for chunk in index.chunks] == [
         "src/repo.py::Repo",
         "src/repo.py::Repo.fetch",
