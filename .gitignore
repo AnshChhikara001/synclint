@@ -14,3 +14,6 @@ docs/agents/
 # Source material and the local LLM response cache
 project-idea/
 .cache/
+
+# Local progress tracking
+progress_nd_prompt.md
