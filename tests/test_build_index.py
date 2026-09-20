@@ -60,3 +60,62 @@ def test_records_classes_and_methods_by_qualified_name(tmp_path: Path) -> None:
     ]
     assert index.chunks[0].signature == "class Repo(Base, metaclass=Meta)"
     assert index.chunks[1].signature == "async def fetch(self, url: str) -> bytes"
+
+
+def test_splits_documentation_into_sections_by_heading(tmp_path: Path) -> None:
+    write(
+        tmp_path,
+        "README.md",
+        """
+        # synclint
+
+        Checks that the docs still match the code.
+
+        ## Usage
+
+        Add the workflow file.
+
+        ### Configuration
+
+        Set the documentation glob.
+
+        ## Limitations
+
+        Python only.
+        """,
+    )
+
+    index = build_index(tmp_path)
+
+    assert [section.heading_path for section in index.sections] == [
+        ("synclint",),
+        ("synclint", "Usage"),
+        ("synclint", "Usage", "Configuration"),
+        ("synclint", "Limitations"),
+    ]
+    assert index.sections[2].id == "README.md#synclint > Usage > Configuration"
+    assert index.sections[2].text == "Set the documentation glob."
+
+
+def test_does_not_split_on_a_heading_inside_a_fenced_code_block(tmp_path: Path) -> None:
+    write(
+        tmp_path,
+        "README.md",
+        """
+        # Usage
+
+        Run it like this:
+
+        ```python
+        # Build the index
+        build_index(root)
+        ```
+
+        That is all.
+        """,
+    )
+
+    index = build_index(tmp_path)
+
+    assert [section.heading_path for section in index.sections] == [("Usage",)]
+    assert "build_index(root)" in index.sections[0].text
