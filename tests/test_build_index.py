@@ -1,7 +1,11 @@
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from textwrap import dedent
 
-from synclint.index import build_index
+from synclint.index import Index, build_index
 
 
 def write(root: Path, relative: str, content: str) -> None:
@@ -153,3 +157,144 @@ def test_links_a_section_to_a_chunk_it_names(tmp_path: Path) -> None:
     assert [(link.section, link.chunk, link.mechanism) for link in index.links] == [
         ("README.md#Usage", "src/indexing.py::build_index", "name"),
     ]
+
+
+def write_documentation_tree(root: Path) -> None:
+    for relative in (
+        "README.md",
+        "docs/guide.md",
+        "docs/reference/api.md",
+        "notes/scratch.md",
+        "CHANGELOG.md",
+    ):
+        write(root, relative, f"# {relative}\n\nSome prose.\n")
+
+
+def test_documentation_defaults_to_the_readme_and_the_docs_directory(tmp_path: Path) -> None:
+    write_documentation_tree(tmp_path)
+
+    index = build_index(tmp_path)
+
+    assert sorted({section.path for section in index.sections}) == [
+        "README.md",
+        "docs/guide.md",
+        "docs/reference/api.md",
+    ]
+
+
+def test_documentation_glob_is_configurable(tmp_path: Path) -> None:
+    write_documentation_tree(tmp_path)
+
+    index = build_index(tmp_path, doc_globs=["notes/*.md", "CHANGELOG.md"])
+
+    assert sorted({section.path for section in index.sections}) == [
+        "CHANGELOG.md",
+        "notes/scratch.md",
+    ]
+
+
+def write_authentication_repository(root: Path) -> None:
+    write(
+        root,
+        "src/auth.py",
+        '''
+        def authenticate(token: str) -> bool:
+            """Return whether the token is still valid."""
+            return token == DEVELOPMENT_BACKDOOR
+        ''',
+    )
+    write(
+        root,
+        "README.md",
+        """
+        # Auth
+
+        Call `authenticate(token)` before serving a request.
+        """,
+    )
+
+
+def test_serialises_chunks_sections_and_links_to_json(tmp_path: Path) -> None:
+    write_authentication_repository(tmp_path)
+
+    document = json.loads(build_index(tmp_path).to_json())
+
+    assert document == {
+        "chunks": [
+            {
+                "id": "src/auth.py::authenticate",
+                "path": "src/auth.py",
+                "qualname": "authenticate",
+                "signature": "def authenticate(token: str) -> bool",
+                "docstring": "Return whether the token is still valid.",
+                "decorators": [],
+            }
+        ],
+        "sections": [
+            {
+                "id": "README.md#Auth",
+                "path": "README.md",
+                "heading_path": ["Auth"],
+                "text": "Call `authenticate(token)` before serving a request.",
+            }
+        ],
+        "links": [
+            {
+                "section": "README.md#Auth",
+                "chunk": "src/auth.py::authenticate",
+                "mechanism": "name",
+            }
+        ],
+    }
+
+
+def test_omits_function_bodies_from_the_index(tmp_path: Path) -> None:
+    write_authentication_repository(tmp_path)
+
+    assert "DEVELOPMENT_BACKDOOR" not in build_index(tmp_path).to_json()
+
+
+def test_reads_back_the_index_it_wrote(tmp_path: Path) -> None:
+    write_authentication_repository(tmp_path)
+
+    index = build_index(tmp_path)
+
+    assert Index.from_json(index.to_json()) == index
+
+
+def render_index(root: Path, hash_seed: str) -> str:
+    """Build and render the index in a fresh interpreter with a given hash seed."""
+    script = (
+        "import sys; from pathlib import Path; from synclint.index import build_index;"
+        " sys.stdout.write(build_index(Path(sys.argv[1])).to_json())"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(root)],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "PYTHONHASHSEED": hash_seed},
+    )
+    return result.stdout
+
+
+def test_rebuilding_unchanged_input_produces_byte_identical_json(tmp_path: Path) -> None:
+    write_authentication_repository(tmp_path)
+    write_documentation_tree(tmp_path)
+    write(
+        tmp_path,
+        "src/indexing.py",
+        '''
+        class Indexer:
+            """Walks a repository."""
+
+            def scan(self, root):
+                """Read every file under root."""
+        ''',
+    )
+
+    # Separate interpreters with different hash seeds: set iteration order is
+    # the way this output most plausibly stops being reproducible.
+    renderings = {render_index(tmp_path, seed) for seed in ("0", "1", "2")}
+
+    assert len(renderings) == 1

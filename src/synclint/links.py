@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from synclint.chunks import Chunk
 from synclint.sections import Section
@@ -20,6 +21,17 @@ class Link:
     section: str
     chunk: str
     mechanism: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"section": self.section, "chunk": self.chunk, "mechanism": self.mechanism}
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "Link":
+        return cls(
+            section=data["section"],
+            chunk=data["chunk"],
+            mechanism=data["mechanism"],
+        )
 
 
 def propose_name_links(sections: Iterable[Section], chunks: Iterable[Chunk]) -> list[Link]:

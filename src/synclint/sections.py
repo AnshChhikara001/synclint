@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 # ATX headings only. TODO: setext headings (`Title` underlined with `===`) are
 # not recognised, so an older README written that way indexes as one section.
@@ -23,6 +25,22 @@ class Section:
     def id(self) -> str:
         """The section's identity: its file path plus its full heading path."""
         return f"{self.path}#{' > '.join(self.heading_path)}"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "path": self.path,
+            "heading_path": list(self.heading_path),
+            "text": self.text,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "Section":
+        return cls(
+            path=data["path"],
+            heading_path=tuple(data["heading_path"]),
+            text=data["text"],
+        )
 
 
 def split_sections(markdown: str, path: str) -> list[Section]:

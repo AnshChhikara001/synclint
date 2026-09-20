@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import ast
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from typing import Any
 
 Definition = ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
 
@@ -28,6 +29,26 @@ class Chunk:
     def id(self) -> str:
         """The chunk's identity: its file path plus its qualified name."""
         return f"{self.path}::{self.qualname}"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "path": self.path,
+            "qualname": self.qualname,
+            "signature": self.signature,
+            "docstring": self.docstring,
+            "decorators": list(self.decorators),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "Chunk":
+        return cls(
+            path=data["path"],
+            qualname=data["qualname"],
+            signature=data["signature"],
+            docstring=data["docstring"],
+            decorators=tuple(data["decorators"]),
+        )
 
 
 def extract_chunks(source: str, path: str) -> list[Chunk]:

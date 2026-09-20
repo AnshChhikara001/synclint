@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +21,30 @@ class Index:
     chunks: tuple[Chunk, ...]
     sections: tuple[Section, ...]
     links: tuple[Link, ...]
+
+    def to_json(self) -> str:
+        """Render the index as the JSON that gets committed to the repository.
+
+        Chunk and section ids are derived from the fields beside them. They are
+        written out anyway so that a link can be grepped back to what it points
+        at, and ignored when reading.
+        """
+        document = {
+            "chunks": [chunk.to_dict() for chunk in self.chunks],
+            "sections": [section.to_dict() for section in self.sections],
+            "links": [link.to_dict() for link in self.links],
+        }
+        return json.dumps(document, indent=2) + "\n"
+
+    @classmethod
+    def from_json(cls, document: str) -> "Index":
+        """Read back an index rendered by `to_json`."""
+        data = json.loads(document)
+        return cls(
+            chunks=tuple(Chunk.from_dict(chunk) for chunk in data["chunks"]),
+            sections=tuple(Section.from_dict(section) for section in data["sections"]),
+            links=tuple(Link.from_dict(link) for link in data["links"]),
+        )
 
 
 def build_index(root: Path, doc_globs: Sequence[str] = DEFAULT_DOC_GLOBS) -> Index:
