@@ -41,7 +41,7 @@ class Chunk:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "Chunk":
+    def from_dict(cls, data: Mapping[str, Any]) -> Chunk:
         return cls(
             path=data["path"],
             qualname=data["qualname"],

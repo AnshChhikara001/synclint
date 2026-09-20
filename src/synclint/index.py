@@ -37,7 +37,7 @@ class Index:
         return json.dumps(document, indent=2) + "\n"
 
     @classmethod
-    def from_json(cls, document: str) -> "Index":
+    def from_json(cls, document: str) -> Index:
         """Read back an index rendered by `to_json`."""
         data = json.loads(document)
         return cls(
@@ -48,7 +48,12 @@ class Index:
 
 
 def build_index(root: Path, doc_globs: Sequence[str] = DEFAULT_DOC_GLOBS) -> Index:
-    """Index the repository rooted at `root`."""
+    """Index the repository rooted at `root`.
+
+    `doc_globs` are patterns, relative to `root`, naming the markdown that
+    counts as documentation. Python is found by walking the tree, so only the
+    documentation side is configurable.
+    """
     chunks: list[Chunk] = []
     for path in _source(root):
         try:

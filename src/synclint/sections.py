@@ -35,7 +35,7 @@ class Section:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "Section":
+    def from_dict(cls, data: Mapping[str, Any]) -> Section:
         return cls(
             path=data["path"],
             heading_path=tuple(data["heading_path"]),
@@ -49,10 +49,10 @@ def split_sections(markdown: str, path: str) -> list[Section]:
     A section runs from its heading to the next heading of any level, so
     subsections are separate sections rather than nested inside their parent.
     """
-    sections: list[Section] = []
     # TODO: two headings with the same path in one file produce two sections
     # with the same id. Links to either become ambiguous; needs an occurrence
     # suffix once `publish` has to point at one of them.
+    sections: list[Section] = []
     headings: list[tuple[int, str]] = []
     body: list[str] = []
 

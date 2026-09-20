@@ -26,7 +26,7 @@ class Link:
         return {"section": self.section, "chunk": self.chunk, "mechanism": self.mechanism}
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "Link":
+    def from_dict(cls, data: Mapping[str, Any]) -> Link:
         return cls(
             section=data["section"],
             chunk=data["chunk"],
