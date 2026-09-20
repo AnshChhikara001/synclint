@@ -298,3 +298,22 @@ def test_rebuilding_unchanged_input_produces_byte_identical_json(tmp_path: Path)
     renderings = {render_index(tmp_path, seed) for seed in ("0", "1", "2")}
 
     assert len(renderings) == 1
+
+
+def test_ignores_python_under_hidden_and_cache_directories(tmp_path: Path) -> None:
+    write(tmp_path, "src/indexing.py", "def build_index(root): ...\n")
+    write(tmp_path, ".venv/lib/vendored.py", "def vendored(): ...\n")
+    write(tmp_path, "src/__pycache__/stale.py", "def stale(): ...\n")
+
+    index = build_index(tmp_path)
+
+    assert [chunk.qualname for chunk in index.chunks] == ["build_index"]
+
+
+def test_skips_a_python_file_that_does_not_parse(tmp_path: Path) -> None:
+    write(tmp_path, "src/indexing.py", "def build_index(root): ...\n")
+    write(tmp_path, "src/legacy.py", "print 'python 2'\n")
+
+    index = build_index(tmp_path)
+
+    assert [chunk.qualname for chunk in index.chunks] == ["build_index"]

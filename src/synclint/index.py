@@ -50,8 +50,14 @@ class Index:
 def build_index(root: Path, doc_globs: Sequence[str] = DEFAULT_DOC_GLOBS) -> Index:
     """Index the repository rooted at `root`."""
     chunks: list[Chunk] = []
-    for path in sorted(root.rglob("*.py")):
-        chunks.extend(extract_chunks(path.read_text(), _relative(path, root)))
+    for path in _source(root):
+        try:
+            chunks.extend(extract_chunks(path.read_bytes(), _relative(path, root)))
+        except SyntaxError:
+            # A repository can hold Python this interpreter cannot parse: a
+            # python 2 file, a template, a fixture broken on purpose. One of
+            # them must not cost the whole index.
+            continue
 
     sections: list[Section] = []
     for path in _documentation(root, doc_globs):
@@ -61,6 +67,20 @@ def build_index(root: Path, doc_globs: Sequence[str] = DEFAULT_DOC_GLOBS) -> Ind
         chunks=tuple(chunks),
         sections=tuple(sections),
         links=tuple(propose_name_links(sections, chunks)),
+    )
+
+
+def _source(root: Path) -> list[Path]:
+    # TODO: replace with `git ls-files` once `analyse` has made git a hard
+    # dependency. That would also exclude a non-hidden virtualenv and anything
+    # else the repository has chosen to ignore.
+    return sorted(
+        path
+        for path in root.rglob("*.py")
+        if not any(
+            part.startswith(".") or part == "__pycache__"
+            for part in path.relative_to(root).parts
+        )
     )
 
 

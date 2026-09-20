@@ -51,8 +51,12 @@ class Chunk:
         )
 
 
-def extract_chunks(source: str, path: str) -> list[Chunk]:
-    """Extract every chunk defined in one Python source file, in source order."""
+def extract_chunks(source: str | bytes, path: str) -> list[Chunk]:
+    """Extract every chunk defined in one Python source file, in source order.
+
+    Raises `SyntaxError` if the source does not parse. Bytes are accepted so
+    that `ast` applies the file's own encoding declaration.
+    """
     return list(_walk(ast.parse(source).body, path, prefix=""))
 
 
