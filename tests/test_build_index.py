@@ -119,3 +119,37 @@ def test_does_not_split_on_a_heading_inside_a_fenced_code_block(tmp_path: Path) 
 
     assert [section.heading_path for section in index.sections] == [("Usage",)]
     assert "build_index(root)" in index.sections[0].text
+
+
+def test_links_a_section_to_a_chunk_it_names(tmp_path: Path) -> None:
+    write(
+        tmp_path,
+        "src/indexing.py",
+        '''
+        def build_index(root):
+            """Walk a repository and record what it contains."""
+
+
+        def prune_orphans(root):
+            """Nothing in the documentation mentions this."""
+        ''',
+    )
+    write(
+        tmp_path,
+        "README.md",
+        """
+        # Usage
+
+        Call `build_index(root)` and it walks the repository for you.
+
+        ## Internals
+
+        Nothing here names anything.
+        """,
+    )
+
+    index = build_index(tmp_path)
+
+    assert [(link.section, link.chunk, link.mechanism) for link in index.links] == [
+        ("README.md#Usage", "src/indexing.py::build_index", "name"),
+    ]

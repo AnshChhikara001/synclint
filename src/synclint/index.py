@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from synclint.chunks import Chunk, extract_chunks
+from synclint.links import Link, propose_name_links
 from synclint.sections import Section, split_sections
 
 DEFAULT_DOC_GLOBS = ("README.md", "docs/**/*.md")
@@ -18,6 +19,7 @@ class Index:
 
     chunks: tuple[Chunk, ...]
     sections: tuple[Section, ...]
+    links: tuple[Link, ...]
 
 
 def build_index(root: Path, doc_globs: Sequence[str] = DEFAULT_DOC_GLOBS) -> Index:
@@ -30,7 +32,11 @@ def build_index(root: Path, doc_globs: Sequence[str] = DEFAULT_DOC_GLOBS) -> Ind
     for path in _documentation(root, doc_globs):
         sections.extend(split_sections(path.read_text(), _relative(path, root)))
 
-    return Index(chunks=tuple(chunks), sections=tuple(sections))
+    return Index(
+        chunks=tuple(chunks),
+        sections=tuple(sections),
+        links=tuple(propose_name_links(sections, chunks)),
+    )
 
 
 def _documentation(root: Path, doc_globs: Sequence[str]) -> list[Path]:
