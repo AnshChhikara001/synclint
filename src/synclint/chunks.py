@@ -1,0 +1,70 @@
+"""Chunk extraction: the functions, methods and classes a repository defines."""
+
+from __future__ import annotations
+
+import ast
+from collections.abc import Iterator
+from dataclasses import dataclass
+
+Definition = ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+
+
+@dataclass(frozen=True)
+class Chunk:
+    """A function, method or class, recorded without its body.
+
+    The body is deliberately absent: indexing cost stays proportional to
+    repository size, and `analyse` reads bodies only for the chunks a diff
+    touched.
+    """
+
+    path: str
+    qualname: str
+    signature: str
+    docstring: str | None
+    decorators: tuple[str, ...]
+
+    @property
+    def id(self) -> str:
+        """The chunk's identity: its file path plus its qualified name."""
+        return f"{self.path}::{self.qualname}"
+
+
+def extract_chunks(source: str, path: str) -> list[Chunk]:
+    """Extract every chunk defined in one Python source file, in source order."""
+    return list(_walk(ast.parse(source).body, path, prefix=""))
+
+
+def _walk(body: list[ast.stmt], path: str, prefix: str) -> Iterator[Chunk]:
+    for node in body:
+        if not isinstance(node, Definition):
+            continue
+        qualname = f"{prefix}{node.name}"
+        yield _chunk(node, path, qualname)
+        # Descend into classes but not into functions: a function-local
+        # definition is unreachable from documentation, so indexing it would
+        # only add noise to name matching.
+        if isinstance(node, ast.ClassDef):
+            yield from _walk(node.body, path, prefix=f"{qualname}.")
+
+
+def _chunk(node: Definition, path: str, qualname: str) -> Chunk:
+    return Chunk(
+        path=path,
+        qualname=qualname,
+        signature=_signature(node),
+        docstring=ast.get_docstring(node),
+        decorators=tuple(ast.unparse(decorator) for decorator in node.decorator_list),
+    )
+
+
+def _signature(node: Definition) -> str:
+    # Unparsed rather than sliced from the source, so that reformatting a
+    # definition without changing it leaves the index untouched.
+    if isinstance(node, ast.ClassDef):
+        parents = [ast.unparse(base) for base in node.bases]
+        parents += [ast.unparse(keyword) for keyword in node.keywords]
+        return f"class {node.name}({', '.join(parents)})" if parents else f"class {node.name}"
+    keyword = "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
+    returns = f" -> {ast.unparse(node.returns)}" if node.returns else ""
+    return f"{keyword} {node.name}({ast.unparse(node.args)}){returns}"
