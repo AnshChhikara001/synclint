@@ -359,3 +359,16 @@ def test_indexes_documentation_that_is_not_valid_utf8(tmp_path: Path) -> None:
 
     assert [section.path for section in index.sections] == ["README.md"]
     assert [link.chunk for link in index.links] == ["src/auth.py::authenticate"]
+
+
+def test_command_line_writes_the_index_to_a_file(tmp_path: Path) -> None:
+    write_authentication_repository(tmp_path)
+    destination = tmp_path / "synclint-index.json"
+
+    subprocess.run(
+        [sys.executable, "-m", "synclint", str(tmp_path), "--out", str(destination)],
+        check=True,
+        capture_output=True,
+    )
+
+    assert Index.from_json(destination.read_text()) == build_index(tmp_path)
