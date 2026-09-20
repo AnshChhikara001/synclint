@@ -23,7 +23,8 @@ class Section:
 
     @property
     def id(self) -> str:
-        """The section's identity: its file path plus its full heading path."""
+        if not self.heading_path:
+            return self.path
         return f"{self.path}#{' > '.join(self.heading_path)}"
 
     def to_dict(self) -> dict[str, Any]:
@@ -48,6 +49,8 @@ def split_sections(markdown: str, path: str) -> list[Section]:
 
     A section runs from its heading to the next heading of any level, so
     subsections are separate sections rather than nested inside their parent.
+    Prose above the first heading is a section too, with an empty heading path:
+    it is real documentation and can drift like any other.
     """
     # TODO: two headings with the same path in one file produce two sections
     # with the same id. Links to either become ambiguous; needs an occurrence

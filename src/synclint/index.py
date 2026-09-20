@@ -11,7 +11,7 @@ from synclint.chunks import Chunk, extract_chunks
 from synclint.links import Link, propose_name_links
 from synclint.sections import Section, split_sections
 
-DEFAULT_DOC_GLOBS = ("README.md", "docs/**/*.md")
+DEFAULT_DOCUMENTATION_GLOBS = ("README.md", "docs/**/*.md")
 
 
 @dataclass(frozen=True)
@@ -47,12 +47,15 @@ class Index:
         )
 
 
-def build_index(root: Path, doc_globs: Sequence[str] = DEFAULT_DOC_GLOBS) -> Index:
+def build_index(
+    root: Path,
+    documentation_globs: Sequence[str] = DEFAULT_DOCUMENTATION_GLOBS,
+) -> Index:
     """Index the repository rooted at `root`.
 
-    `doc_globs` are patterns, relative to `root`, naming the markdown that
-    counts as documentation. Python is found by walking the tree, so only the
-    documentation side is configurable.
+    `documentation_globs` are patterns, relative to `root`, naming the markdown
+    that counts as documentation. Python is found by walking the tree, so only
+    the documentation side is configurable.
     """
     chunks: list[Chunk] = []
     for path in _source(root):
@@ -65,8 +68,9 @@ def build_index(root: Path, doc_globs: Sequence[str] = DEFAULT_DOC_GLOBS) -> Ind
             continue
 
     sections: list[Section] = []
-    for path in _documentation(root, doc_globs):
-        sections.extend(split_sections(path.read_text(), _relative(path, root)))
+    for path in _documentation(root, documentation_globs):
+        markdown = path.read_text(encoding="utf-8", errors="replace")
+        sections.extend(split_sections(markdown, _relative(path, root)))
 
     return Index(
         chunks=tuple(chunks),
@@ -89,9 +93,20 @@ def _source(root: Path) -> list[Path]:
     )
 
 
-def _documentation(root: Path, doc_globs: Sequence[str]) -> list[Path]:
-    matched = {path for glob in doc_globs for path in root.glob(glob) if path.is_file()}
+def _documentation(root: Path, documentation_globs: Sequence[str]) -> list[Path]:
+    matched = {
+        path
+        for glob in documentation_globs
+        for path in root.glob(glob)
+        if path.is_file() and _within(root, path)
+    }
     return sorted(matched)
+
+
+def _within(root: Path, path: Path) -> bool:
+    # A glob can climb out with `..`, and documentation outside the repository
+    # is out of scope — synclint only ever reports on what the repository owns.
+    return path.resolve().is_relative_to(root.resolve())
 
 
 def _relative(path: Path, root: Path) -> str:

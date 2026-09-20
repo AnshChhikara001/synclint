@@ -185,7 +185,7 @@ def test_documentation_defaults_to_the_readme_and_the_docs_directory(tmp_path: P
 def test_documentation_glob_is_configurable(tmp_path: Path) -> None:
     write_documentation_tree(tmp_path)
 
-    index = build_index(tmp_path, doc_globs=["notes/*.md", "CHANGELOG.md"])
+    index = build_index(tmp_path, documentation_globs=["notes/*.md", "CHANGELOG.md"])
 
     assert sorted({section.path for section in index.sections}) == [
         "CHANGELOG.md",
@@ -317,3 +317,45 @@ def test_skips_a_python_file_that_does_not_parse(tmp_path: Path) -> None:
     index = build_index(tmp_path)
 
     assert [chunk.qualname for chunk in index.chunks] == ["build_index"]
+
+
+def test_records_prose_that_sits_before_the_first_heading(tmp_path: Path) -> None:
+    write(
+        tmp_path,
+        "README.md",
+        """
+        A one-line summary above every heading.
+
+        # Usage
+
+        Add the workflow file.
+        """,
+    )
+
+    index = build_index(tmp_path)
+
+    assert [(section.id, section.heading_path) for section in index.sections] == [
+        ("README.md", ()),
+        ("README.md#Usage", ("Usage",)),
+    ]
+
+
+def test_ignores_documentation_outside_the_repository(tmp_path: Path) -> None:
+    write(tmp_path / "elsewhere", "leaked.md", "# Leaked\n\nNot ours to read.\n")
+    write(tmp_path / "repo", "README.md", "# Ours\n\nOurs to read.\n")
+
+    index = build_index(
+        tmp_path / "repo", documentation_globs=["README.md", "../elsewhere/*.md"]
+    )
+
+    assert [section.path for section in index.sections] == ["README.md"]
+
+
+def test_indexes_documentation_that_is_not_valid_utf8(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_bytes(b"# Caf\xe9\n\nLatin-1 prose about authenticate().\n")
+    write(tmp_path, "src/auth.py", "def authenticate(token): ...\n")
+
+    index = build_index(tmp_path)
+
+    assert [section.path for section in index.sections] == ["README.md"]
+    assert [link.chunk for link in index.links] == ["src/auth.py::authenticate"]
