@@ -32,6 +32,10 @@ _Avoid_: staleness, rot, decay, divergence
 A section linked to a changed chunk, before anything has confirmed whether it actually drifted.
 _Avoid_: candidate, match, hit
 
+**Verification**:
+The model pass that decides whether a suspect actually drifted. Every suspect is verified before it is reported, so a section that is never mentioned was never a suspect rather than one that passed.
+_Avoid_: check, validation, review
+
 **Finding**:
 A suspect confirmed to have drifted, together with the explanation of what is now wrong.
 _Avoid_: issue, error, problem, violation
@@ -51,3 +55,7 @@ _Avoid_: warning, alert, notice
 **Decoy**:
 A fixture change deliberately designed to produce no finding, used to measure the false positive rate.
 _Avoid_: negative case, control, noise
+
+**Spend ceiling**:
+The dollars a single run may spend before it refuses to make another model call. Enforced before each call rather than after, so a run stops short of the ceiling rather than past it.
+_Avoid_: budget, limit, cap, quota

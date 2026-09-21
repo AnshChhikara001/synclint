@@ -365,7 +365,7 @@ def test_command_line_writes_the_index_to_a_file(tmp_path: Path) -> None:
     destination = tmp_path / "synclint-index.json"
 
     subprocess.run(
-        [sys.executable, "-m", "synclint", str(tmp_path), "--out", str(destination)],
+        [sys.executable, "-m", "synclint", "index", str(tmp_path), "--out", str(destination)],
         check=True,
         capture_output=True,
     )

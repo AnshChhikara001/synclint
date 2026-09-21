@@ -5,9 +5,10 @@ from textwrap import dedent
 
 import pytest
 
-from synclint.analyse import analyse
+from synclint.__main__ import render
+from synclint.analyse import Finding, Report, analyse
 from synclint.index import build_index
-from synclint.model import ModelClient, ModelResponse, Pricing
+from synclint.model import ModelClient, ModelResponse, Pricing, Spend
 
 PRICING = Pricing(input=1.00, output=2.00)
 
@@ -210,3 +211,30 @@ def test_reports_what_the_run_consumed(tmp_path: Path) -> None:
     assert report.spend.calls == 1
     assert report.spend.input_tokens == 100
     assert report.spend.dollars == pytest.approx(0.00014)
+
+
+def test_the_command_line_prints_the_findings_and_what_they_cost() -> None:
+    report = Report(
+        findings=(
+            Finding(
+                section="README.md#Fetching",
+                chunk="src/http.py::fetch",
+                explanation="It now gives up after five attempts, not three.",
+            ),
+        ),
+        checked=("README.md#Fetching", "docs/guide.md#Retries"),
+        spend=Spend(calls=2, input_tokens=1200, output_tokens=140, dollars=0.00148),
+    )
+
+    printed = render(report)
+
+    assert "Checked 2 sections; 1 has drifted." in printed
+    assert "README.md#Fetching  (src/http.py::fetch)" in printed
+    assert "It now gives up after five attempts, not three." in printed
+    assert "2 model calls, 1200 tokens in, 140 out, $0.0015 spent." in printed
+
+
+def test_the_command_line_says_so_when_nothing_drifted() -> None:
+    printed = render(Report(findings=(), checked=("README.md#Fetching",), spend=Spend()))
+
+    assert "Checked 1 section; 0 have drifted." in printed
