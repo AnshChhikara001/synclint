@@ -26,9 +26,11 @@ class Finding:
 class Report:
     """What one run of `analyse` concluded.
 
-    `unchecked` is how many suspect sections the run never reached, which is
-    zero unless it stopped at its spend ceiling. Without it a truncated report
-    would read exactly like a clean one.
+    `verified` names the sections put to the model; `unchecked` counts the
+    suspects never reached, which is zero unless the run stopped at its spend
+    ceiling. A section can be a suspect twice over, against two changed chunks,
+    so a section can appear in `verified` while a suspect naming it went
+    unchecked. Without that count a truncated report would read like a clean one.
     """
 
     findings: tuple[Finding, ...]
@@ -97,9 +99,7 @@ def analyse(
         try:
             finding = _verify(model, section, change)
         except SpendCeilingExceeded:
-            unchecked = len(
-                {suspect.id for suspect, _ in suspects[position:]} - set(verified)
-            )
+            unchecked = len(suspects) - position
             break
         verified.append(section.id)
         if finding is not None:
@@ -118,9 +118,17 @@ def _changes(root: Path, base: str, head: str) -> list[ChunkChange]:
     for path in modified_python_files(root, base, head):
         if is_test_file(path):
             continue
-        changes.extend(
-            changed_chunks(file_at(root, base, path), file_at(root, head, path), path)
-        )
+        try:
+            changes.extend(
+                changed_chunks(
+                    file_at(root, base, path), file_at(root, head, path), path
+                )
+            )
+        except SyntaxError:
+            # `build_index` skips the file this interpreter cannot parse rather
+            # than lose the whole index. A run has the same stake in one broken
+            # file, and a larger one: it is checking a change, not a snapshot.
+            continue
     return changes
 
 

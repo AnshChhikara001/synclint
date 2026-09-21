@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import ast
+import copy
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
-from synclint.chunks import chunk_id, walk_definitions
+from synclint.chunks import Definition, chunk_id, walk_definitions
 
 
 @dataclass(frozen=True)
@@ -30,9 +31,13 @@ class ChunkChange:
 def changed_chunks(before: str, after: str, path: str) -> list[ChunkChange]:
     """Report the chunks of one Python file that differ between two revisions.
 
-    A change to a method is also a change to the class holding it, so both are
-    reported. A section describing the class may well describe the behaviour
-    that moved, and missing that is worse than checking it twice.
+    A class is compared on its own source only — its bases, decorators and
+    class-level statements — never on the methods inside it. Those are chunks
+    in their own right and are compared separately. Carrying them would report
+    a one-line method change twice, once as the method and once as a class
+    whose before and after held every untouched sibling's body as well.
+
+    Raises `SyntaxError` if either revision does not parse.
 
     Chunks added or removed between the revisions are not reported, and nor are
     whole files, which `git.modified_python_files` leaves out. A section
@@ -55,8 +60,25 @@ def _definitions(source: str) -> dict[str, str]:
     tree = ast.parse(source)
     _strip_docstrings(tree)
     return {
-        qualname: ast.unparse(node) for qualname, node in walk_definitions(tree.body)
+        qualname: _own_source(node)
+        for qualname, node in walk_definitions(tree.body)
     }
+
+
+def _own_source(node: Definition) -> str:
+    """The source of one definition, without the definitions nested inside it.
+
+    Only classes have any stripped. A function-local definition is part of what
+    the function does and nothing else indexes it, so it stays.
+    """
+    if not isinstance(node, ast.ClassDef):
+        return ast.unparse(node)
+    own = copy.copy(node)
+    # `ast.unparse` cannot render a class with an empty body.
+    own.body = [
+        statement for statement in node.body if not isinstance(statement, Definition)
+    ] or [ast.Pass()]
+    return ast.unparse(own)
 
 
 _DOCUMENTED = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)

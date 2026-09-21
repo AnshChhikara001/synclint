@@ -126,7 +126,9 @@ def _analyse(arguments: argparse.Namespace) -> None:
 
 def render(report: Report) -> str:
     """Render a report for a terminal."""
-    drifted = len(report.findings)
+    # Counted over sections rather than findings: one section can drift against
+    # two changed chunks, and "1 section; 2 have drifted" reads as nonsense.
+    drifted = len({finding.section for finding in report.findings})
     lines = [
         f"Verified {len(report.verified)} section{_plural(len(report.verified))}; "
         f"{drifted} {'has' if drifted == 1 else 'have'} drifted.",
@@ -141,7 +143,7 @@ def render(report: Report) -> str:
     if report.unchecked:
         lines += [
             f"Stopped at the spend ceiling with {report.unchecked} "
-            f"section{_plural(report.unchecked)} unverified. Raise --ceiling to go on.",
+            f"suspect{_plural(report.unchecked)} unverified. Raise --ceiling to go on.",
             "",
         ]
     spend = report.spend

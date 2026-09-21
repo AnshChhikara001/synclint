@@ -291,4 +291,68 @@ def test_a_run_that_hits_its_ceiling_keeps_what_it_already_paid_for(
     assert len(report.findings) == 1
     assert len(report.verified) == 1
     assert report.unchecked == 1
-    assert "Stopped at the spend ceiling with 1 section unverified" in render(report)
+    assert "Stopped at the spend ceiling with 1 suspect unverified" in render(report)
+
+
+def test_survives_a_modified_file_that_does_not_parse(tmp_path: Path) -> None:
+    start(
+        tmp_path,
+        {
+            "src/http.py": BASE_SOURCE,
+            "src/legacy.py": "def fetch_old(url):\n    return url\n",
+            "README.md": FETCHING_DOCS,
+        },
+    )
+    index = build_index(tmp_path)
+    commit(
+        tmp_path,
+        {"src/http.py": DRIFTED_SOURCE, "src/legacy.py": "print 'python 2'\n"},
+        "raise the retry limit and touch the old file",
+    )
+
+    model = ScriptedModel(accurate=False, explanation="It now gives up after five.")
+    report = analyse(tmp_path, index, "main~1", "main", client(model))
+
+    assert [finding.chunk for finding in report.findings] == ["src/http.py::fetch"]
+
+
+def test_a_method_change_is_put_to_the_model_once_not_twice(tmp_path: Path) -> None:
+    start(
+        tmp_path,
+        {
+            "src/http.py": """
+            class Client:
+                def retries(self):
+                    return 3
+            """,
+            "README.md": """
+            # Fetching
+
+            `Client` gives up after three attempts; see `retries`.
+            """,
+        },
+    )
+    index = build_index(tmp_path)
+    # The section names both `Client` and `retries`, so the index links it to
+    # both chunks — but only one of them changed.
+    assert len(index.links) == 2
+    commit(
+        tmp_path,
+        {
+            "src/http.py": """
+            class Client:
+                def retries(self):
+                    return 5
+            """
+        },
+        "raise the retry limit",
+    )
+
+    model = ScriptedModel(accurate=False, explanation="It now gives up after five.")
+    report = analyse(tmp_path, index, "main~1", "main", client(model))
+
+    assert len(model.asked) == 1
+    assert [finding.chunk for finding in report.findings] == [
+        "src/http.py::Client.retries"
+    ]
+    assert "1 has drifted" in render(report)

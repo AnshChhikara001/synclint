@@ -222,6 +222,17 @@ class OpenAIModel:
                 }
             },
         )
+        if response.status != "completed":
+            # An answer cut short — most likely by max_output_tokens, which
+            # reasoning tokens also count against — comes back with empty text.
+            # Returning it would poison the cache under a key that never
+            # expires, and every replay after it would fail to parse.
+            reason = (
+                response.incomplete_details.reason
+                if response.incomplete_details
+                else response.status
+            )
+            raise RuntimeError(f"{self.name} did not finish answering: {reason}")
         if response.usage is None:
             # The ledger is the only thing standing between this and the
             # budget, so an unmetered answer is worse than no answer.
