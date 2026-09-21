@@ -14,6 +14,14 @@ from synclint.sections import Section
 
 
 @dataclass(frozen=True)
+class Suspect:
+    """A section linked to a changed chunk, before anything has confirmed it drifted."""
+
+    section: Section
+    change: ChunkChange
+
+
+@dataclass(frozen=True)
 class Finding:
     """A suspect confirmed to have drifted, with what is now wrong about it."""
 
@@ -85,23 +93,18 @@ def analyse(
     raising: the findings are already paid for, and the report says how many
     suspects it never got to.
     """
-    sections = {section.id: section for section in index.sections}
-    suspects = [
-        (section, change)
-        for change in _changes(root, base, head)
-        for section in _suspects(index, change, sections)
-    ]
+    pending = suspects(root, index, base, head)
 
     findings: list[Finding] = []
     verified: list[str] = []
     unchecked = 0
-    for position, (section, change) in enumerate(suspects):
+    for position, suspect in enumerate(pending):
         try:
-            finding = _verify(model, section, change)
+            finding = _verify(model, suspect)
         except SpendCeilingExceeded:
-            unchecked = len(suspects) - position
+            unchecked = len(pending) - position
             break
-        verified.append(section.id)
+        verified.append(suspect.section.id)
         if finding is not None:
             findings.append(finding)
 
@@ -111,6 +114,24 @@ def analyse(
         unchecked=unchecked,
         spend=model.spend,
     )
+
+
+def suspects(root: Path, index: Index, base: str, head: str) -> list[Suspect]:
+    """Every section the change from `base` to `head` puts in question, with the change.
+
+    This is the whole of what `analyse` decides before it spends anything: a
+    section reaches the model only by appearing here. Separated out so that the
+    fixture corpus can measure which planted cases the index and the diff
+    actually reach, which costs nothing, apart from whether the model then
+    judges them correctly, which does.
+    """
+    sections = {section.id: section for section in index.sections}
+    return [
+        Suspect(section=sections[link.section], change=change)
+        for change in _changes(root, base, head)
+        for link in index.links
+        if link.chunk == change.chunk and link.section in sections
+    ]
 
 
 def _changes(root: Path, base: str, head: str) -> list[ChunkChange]:
@@ -132,26 +153,19 @@ def _changes(root: Path, base: str, head: str) -> list[ChunkChange]:
     return changes
 
 
-def _suspects(
-    index: Index, change: ChunkChange, sections: dict[str, Section]
-) -> list[Section]:
-    return [
-        sections[link.section]
-        for link in index.links
-        if link.chunk == change.chunk and link.section in sections
-    ]
-
-
-def _verify(model: ModelClient, section: Section, change: ChunkChange) -> Finding | None:
-    answer = json.loads(model.complete(_SYSTEM, _question(section, change), _SCHEMA))
+def _verify(model: ModelClient, suspect: Suspect) -> Finding | None:
+    answer = json.loads(model.complete(_SYSTEM, _question(suspect), _SCHEMA))
     if answer["accurate"]:
         return None
     return Finding(
-        section=section.id, chunk=change.chunk, explanation=answer["explanation"]
+        section=suspect.section.id,
+        chunk=suspect.change.chunk,
+        explanation=answer["explanation"],
     )
 
 
-def _question(section: Section, change: ChunkChange) -> str:
+def _question(suspect: Suspect) -> str:
+    section, change = suspect.section, suspect.change
     return (
         f"Documentation section {section.id}:\n\n{section.text}\n\n"
         f"The chunk {change.chunk} before the change:\n\n{change.before}\n\n"

@@ -6,7 +6,7 @@ from textwrap import dedent
 import pytest
 
 from synclint.__main__ import render
-from synclint.analyse import Finding, Report, analyse
+from synclint.analyse import Finding, Report, analyse, suspects
 from synclint.index import build_index
 from synclint.model import ModelClient, ModelResponse, Pricing, Spend
 
@@ -356,3 +356,38 @@ def test_a_method_change_is_put_to_the_model_once_not_twice(tmp_path: Path) -> N
         "src/http.py::Client.retries"
     ]
     assert "1 has drifted" in render(report)
+
+
+def test_suspects_pair_each_changed_chunk_with_the_sections_linked_to_it(
+    tmp_path: Path,
+) -> None:
+    start(
+        tmp_path,
+        {
+            "src/http.py": """
+            def fetch(url, retries=3):
+                return url
+
+            def backoff(attempt):
+                return attempt
+            """,
+            "README.md": """
+            # Fetching
+
+            Call `fetch(url)`. It gives up after three attempts.
+
+            ## Waiting
+
+            `fetch` waits between attempts using `backoff`.
+            """,
+        },
+    )
+    index = build_index(tmp_path)
+    commit(tmp_path, {"src/http.py": DRIFTED_SOURCE}, "raise the retry limit")
+
+    found = suspects(tmp_path, index, "main~1", "main")
+
+    assert [(suspect.section.id, suspect.change.chunk) for suspect in found] == [
+        ("README.md#Fetching", "src/http.py::fetch"),
+        ("README.md#Fetching > Waiting", "src/http.py::fetch"),
+    ]
