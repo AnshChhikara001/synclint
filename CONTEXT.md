@@ -52,6 +52,18 @@ _Avoid_: score, certainty, probability
 A finding surfaced for human review instead of repaired, because confidence was too low.
 _Avoid_: warning, alert, notice
 
+**Corpus**:
+The fixture repository every published accuracy number is measured against: a small library, its documentation, and the planted cases committed against it.
+_Avoid_: dataset, benchmark, suite, sample
+
+**Case**:
+One planted change to the corpus, together with the section and the chunk it is expected to invalidate. Ground truth, recorded independently of what synclint can currently detect.
+_Avoid_: example, scenario, instance
+
+**Reach**:
+Whether a case's expected section and chunk meet as a suspect at all. The ceiling on what a run could possibly find before the model is asked anything, and the half of recall that costs nothing to measure.
+_Avoid_: coverage, detectable, hit
+
 **Decoy**:
 A fixture change deliberately designed to produce no finding, used to measure the false positive rate.
 _Avoid_: negative case, control, noise

@@ -9,13 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 from synclint.analyse import Report, analyse
-from synclint.corpus import (
-    KINDS,
-    Corpus,
-    Validation,
-    build_corpus,
-    validate_corpus,
-)
+from synclint.corpus import KINDS, Audit, Corpus, audit_corpus, build_corpus
 from synclint.index import DEFAULT_DOCUMENTATION_GLOBS, Index, build_index
 from synclint.model import DEFAULT_MODEL, PRICES, ModelClient, OpenAIModel
 
@@ -78,9 +72,9 @@ def main() -> None:
     )
 
     corpus_parser = subcommands.add_parser(
-        "corpus", help="check the fixture corpus against its manifest"
+        "corpus", help="audit the fixture corpus against its manifest"
     )
-    corpus_parser.add_argument("source", type=Path, help="the corpus to check")
+    corpus_parser.add_argument("source", type=Path, help="the corpus to audit")
     corpus_parser.add_argument(
         "--build-to",
         type=Path,
@@ -121,16 +115,16 @@ def _index(arguments: argparse.Namespace) -> None:
 
 def _corpus(arguments: argparse.Namespace) -> None:
     if arguments.build_to:
-        _check(build_corpus(arguments.source, arguments.build_to))
+        _audit(build_corpus(arguments.source, arguments.build_to))
         return
     with tempfile.TemporaryDirectory() as directory:
-        _check(build_corpus(arguments.source, Path(directory) / "built"))
+        _audit(build_corpus(arguments.source, Path(directory) / "built"))
 
 
-def _check(corpus: Corpus) -> None:
-    validation = validate_corpus(corpus)
-    sys.stdout.write(render_validation(corpus, validation))
-    if validation.problems:
+def _audit(corpus: Corpus) -> None:
+    audit = audit_corpus(corpus)
+    sys.stdout.write(render_audit(audit))
+    if audit.faults:
         raise SystemExit(1)
 
 
@@ -192,29 +186,31 @@ def render(report: Report) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_validation(corpus: Corpus, validation: Validation) -> str:
-    """Render a checked corpus for a terminal."""
-    counts = Counter(case.kind for case in corpus.cases)
+def render_audit(audit: Audit) -> str:
+    """Render an audited corpus for a terminal."""
+    counts = Counter(case.kind for case in audit.cases)
+    # An unrecognised kind is a fault rather than a reason for this line to
+    # disagree with the case count, so it is counted where it falls.
     kinds = list(KINDS) + [kind for kind in counts if kind not in KINDS]
     shape = ", ".join(f"{counts[kind]} {kind}" for kind in kinds if counts[kind])
-    reached = len(validation.reachable)
-    total = reached + len(validation.unreachable)
+    reached = len(audit.reachable)
+    total = reached + len(audit.unreachable)
     lines = [
-        f"{len(corpus.cases)} case{_plural(len(corpus.cases))}: {shape}.",
+        f"{len(audit.cases)} case{_plural(len(audit.cases))}: {shape}.",
         f"{reached} of {total} reachable as "
         f"{'a suspect' if reached == 1 else 'suspects'}",
     ]
-    if validation.unreachable:
-        lines[-1] += f"; {len(validation.unreachable)} unreachable:"
-        lines += [f"    {case}" for case in validation.unreachable]
+    if audit.unreachable:
+        lines[-1] += f"; {len(audit.unreachable)} unreachable:"
+        lines += [f"    {case}" for case in audit.unreachable]
     else:
         lines[-1] += "."
     lines.append("")
-    if validation.problems:
-        lines.append(f"{len(validation.problems)} problem{_plural(len(validation.problems))}:")
-        lines += [f"    {problem}" for problem in validation.problems]
+    if audit.faults:
+        lines.append(f"{len(audit.faults)} fault{_plural(len(audit.faults))}:")
+        lines += [f"    {fault}" for fault in audit.faults]
     else:
-        lines.append("No problems.")
+        lines.append("No faults.")
     return "\n".join(lines) + "\n"
 
 

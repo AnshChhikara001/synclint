@@ -11,3 +11,8 @@ author still has the context that makes fixing it a two-minute job.
 Under construction. The accuracy numbers this README will eventually carry do not
 exist yet; see `CONTEXT.md` for the vocabulary and `docs/adr/` for the decisions
 taken so far.
+
+They will come from `corpus/`: a small library with documentation, carrying twenty
+deliberately planted drift cases and the ground truth for each one. It has a README
+of its own covering how it is built, what is in it, and what synclint cannot yet
+find in it.

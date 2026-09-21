@@ -31,16 +31,22 @@ Five of each of four kinds:
 | `undocumented-feature` | the code gained something the documentation never mentions |
 
 Every case changes code only. A planted case that edited a markdown file would
-have repaired the drift it was meant to plant, so the checker refuses one.
+have repaired the drift it was meant to plant, so the audit refuses one.
 
-## Checking it
+## Auditing it
 
     python -m synclint corpus corpus
 
-This rebuilds the corpus, checks the manifest against it, and prints how many
+This rebuilds the corpus, audits the manifest against it, and prints how many
 cases synclint currently *reaches* — the expected section and the expected chunk
 meeting as a suspect, which is the most a run can get right before the model is
-asked anything. It exits non-zero only on a problem with the corpus itself.
+asked anything. It exits non-zero only on a fault in the corpus itself.
+
+The two are kept apart deliberately. A fault means the corpus is wrong: a case
+that changes nothing, edits documentation, names a section or a chunk that is
+not there, or names a chunk its own commit does not change. A case with a fault
+is not measured for reach at all, so *unreachable* means one thing only — drift
+correctly recorded that synclint cannot yet get to.
 
 ## What the manifest is not
 

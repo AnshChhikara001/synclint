@@ -1,0 +1,11 @@
+[project]
+name = "bookshelf"
+version = "0.3.0"
+description = "Keep track of the books you own."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
