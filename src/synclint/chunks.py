@@ -10,6 +10,11 @@ from typing import Any
 Definition = ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
 
 
+def chunk_id(path: str, qualname: str) -> str:
+    """The identity of a chunk: where it lives plus what it is called."""
+    return f"{path}::{qualname}"
+
+
 @dataclass(frozen=True)
 class Chunk:
     """A function, method or class, recorded without its body.
@@ -27,7 +32,7 @@ class Chunk:
 
     @property
     def id(self) -> str:
-        return f"{self.path}::{self.qualname}"
+        return chunk_id(self.path, self.qualname)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -56,10 +61,20 @@ def extract_chunks(source: str | bytes, path: str) -> list[Chunk]:
     Raises `SyntaxError` if the source does not parse. Bytes are accepted so
     that `ast` applies the file's own encoding declaration.
     """
-    return list(_walk(ast.parse(source).body, path, prefix=""))
+    return [
+        _chunk(node, path, qualname)
+        for qualname, node in walk_definitions(ast.parse(source).body)
+    ]
 
 
-def _walk(body: list[ast.stmt], path: str, prefix: str) -> Iterator[Chunk]:
+def walk_definitions(
+    body: list[ast.stmt], prefix: str = ""
+) -> Iterator[tuple[str, Definition]]:
+    """Yield every definition in a module body, in source order, with its qualified name.
+
+    Shared with `analyse`, which compares the same definitions across two revisions
+    and must agree with the index about which ones exist.
+    """
     for node in body:
         if not isinstance(node, Definition):
             continue
@@ -67,12 +82,12 @@ def _walk(body: list[ast.stmt], path: str, prefix: str) -> Iterator[Chunk]:
         # all, and two definitions sharing a qualified name in one file collide
         # on one id. The fixture corpus decides how much either costs.
         qualname = f"{prefix}{node.name}"
-        yield _chunk(node, path, qualname)
+        yield qualname, node
         # Descend into classes but not into functions: a function-local
         # definition is unreachable from documentation, so indexing it would
         # only add noise to name matching.
         if isinstance(node, ast.ClassDef):
-            yield from _walk(node.body, path, prefix=f"{qualname}.")
+            yield from walk_definitions(node.body, prefix=f"{qualname}.")
 
 
 def _chunk(node: Definition, path: str, qualname: str) -> Chunk:
