@@ -17,11 +17,21 @@ class ScriptedModel:
     """Answers the verification question the way a test needs it answered."""
 
     name = "scripted-model"
-    max_output_tokens = 500
 
-    def __init__(self, accurate: bool, explanation: str = "") -> None:
+    def __init__(
+        self,
+        accurate: bool,
+        explanation: str = "",
+        *,
+        input_tokens: int = 100,
+        output_tokens: int = 20,
+        max_output_tokens: int = 500,
+    ) -> None:
         self.accurate = accurate
         self.explanation = explanation
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+        self.max_output_tokens = max_output_tokens
         self.asked: list[str] = []
 
     def complete(
@@ -32,8 +42,8 @@ class ScriptedModel:
             text=json.dumps(
                 {"accurate": self.accurate, "explanation": self.explanation}
             ),
-            input_tokens=100,
-            output_tokens=20,
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
         )
 
 
@@ -99,7 +109,7 @@ def test_reports_a_section_the_model_finds_no_longer_accurate(tmp_path: Path) ->
     assert [(f.section, f.chunk, f.explanation) for f in report.findings] == [
         ("README.md#Fetching", "src/http.py::fetch", "It now gives up after five.")
     ]
-    assert report.checked == ("README.md#Fetching",)
+    assert report.verified == ("README.md#Fetching",)
 
 
 def test_a_section_the_model_finds_accurate_is_checked_but_not_reported(
@@ -112,7 +122,7 @@ def test_a_section_the_model_finds_accurate_is_checked_but_not_reported(
     report = analyse(tmp_path, index, "main~1", "main", client(ScriptedModel(True)))
 
     assert report.findings == ()
-    assert report.checked == ("README.md#Fetching",)
+    assert report.verified == ("README.md#Fetching",)
 
 
 def test_reformatting_and_comment_edits_produce_no_suspects(tmp_path: Path) -> None:
@@ -136,7 +146,7 @@ def test_reformatting_and_comment_edits_produce_no_suspects(tmp_path: Path) -> N
     model = ScriptedModel(accurate=False, explanation="never asked")
     report = analyse(tmp_path, index, "main~1", "main", client(model))
 
-    assert report.checked == ()
+    assert report.verified == ()
     assert model.asked == []
 
 
@@ -155,7 +165,7 @@ def test_a_change_confined_to_test_files_produces_no_suspects(tmp_path: Path) ->
     model = ScriptedModel(accurate=False, explanation="never asked")
     report = analyse(tmp_path, index, "main~1", "main", client(model))
 
-    assert report.checked == ()
+    assert report.verified == ()
     assert model.asked == []
 
 
@@ -222,19 +232,63 @@ def test_the_command_line_prints_the_findings_and_what_they_cost() -> None:
                 explanation="It now gives up after five attempts, not three.",
             ),
         ),
-        checked=("README.md#Fetching", "docs/guide.md#Retries"),
+        verified=("README.md#Fetching", "docs/guide.md#Retries"),
+        unchecked=0,
         spend=Spend(calls=2, input_tokens=1200, output_tokens=140, dollars=0.00148),
     )
 
     printed = render(report)
 
-    assert "Checked 2 sections; 1 has drifted." in printed
+    assert "Verified 2 sections; 1 has drifted." in printed
     assert "README.md#Fetching  (src/http.py::fetch)" in printed
     assert "It now gives up after five attempts, not three." in printed
     assert "2 model calls, 1200 tokens in, 140 out, $0.0015 spent." in printed
 
 
 def test_the_command_line_says_so_when_nothing_drifted() -> None:
-    printed = render(Report(findings=(), checked=("README.md#Fetching",), spend=Spend()))
+    printed = render(Report(findings=(), verified=("README.md#Fetching",), unchecked=0, spend=Spend()))
 
-    assert "Checked 1 section; 0 have drifted." in printed
+    assert "Verified 1 section; 0 have drifted." in printed
+
+
+def test_a_run_that_hits_its_ceiling_keeps_what_it_already_paid_for(
+    tmp_path: Path,
+) -> None:
+    start(
+        tmp_path,
+        {
+            "src/http.py": """
+            def fetch(url, retries=3):
+                return url
+            """,
+            "README.md": """
+            # Fetching
+
+            Call `fetch(url)`. It gives up after three attempts.
+
+            ## Retrying
+
+            `fetch` retries three times.
+            """,
+        },
+    )
+    index = build_index(tmp_path)
+    commit(tmp_path, {"src/http.py": DRIFTED_SOURCE}, "raise the retry limit")
+
+    model = ScriptedModel(
+        accurate=False,
+        explanation="It now gives up after five.",
+        input_tokens=100_000,
+        output_tokens=10_000,
+        max_output_tokens=10_000,
+    )
+    # An answered call costs $0.12 — 100k in at $1.00/M, 10k out at $2.00/M —
+    # while reserving one costs $0.02. One call fits under the ceiling and a
+    # second does not, by a margin far wider than the prompt's own length.
+    client = ModelClient(model, pricing=PRICING, ceiling=0.13)
+    report = analyse(tmp_path, index, "main~1", "main", client)
+
+    assert len(report.findings) == 1
+    assert len(report.verified) == 1
+    assert report.unchecked == 1
+    assert "Stopped at the spend ceiling with 1 section unverified" in render(report)

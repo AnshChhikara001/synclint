@@ -184,29 +184,25 @@ PRICES = {
     "gpt-5.4-nano": Pricing(input=0.20, output=1.25),
 }
 
-# The whole project has $2 to spend, and verification is a short judgement over
-# a little text rather than a hard reasoning problem. #6 measures whether the
-# larger model earns its price; until then the cheap one is the honest default.
+# The whole project has $2 to spend. #6 measures whether the larger model earns
+# its price; until then the cheap one is the honest default.
 DEFAULT_MODEL = "gpt-5.4-mini"
 
 
 class OpenAIModel:
     """The provider call, against OpenAI's Responses API."""
 
-    def __init__(
-        self,
-        name: str = DEFAULT_MODEL,
-        *,
-        client: OpenAI | None = None,
-        max_output_tokens: int = 2048,
-        effort: ReasoningEffort = "low",
-    ) -> None:
+    # Reasoning tokens are billed as output and count against this, so it has
+    # to leave room for thinking as well as for the answer, which is one
+    # sentence. Verification is a short judgement over a little text rather
+    # than a hard reasoning problem, hence the low effort; #6 measures whether
+    # either is set too mean.
+    max_output_tokens = 2048
+    _EFFORT: ReasoningEffort = "low"
+
+    def __init__(self, name: str = DEFAULT_MODEL) -> None:
         self.name = name
-        # Reasoning tokens are billed as output and count against this, so it
-        # has to leave room for thinking as well as for the answer.
-        self.max_output_tokens = max_output_tokens
-        self._effort = effort
-        self._client = client if client is not None else OpenAI()
+        self._client = OpenAI()
 
     def complete(
         self, system: str, user: str, schema: dict[str, object]
@@ -216,7 +212,7 @@ class OpenAIModel:
             instructions=system,
             input=user,
             max_output_tokens=self.max_output_tokens,
-            reasoning={"effort": self._effort},
+            reasoning={"effort": self._EFFORT},
             text={
                 "format": {
                     "type": "json_schema",

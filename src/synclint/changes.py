@@ -34,9 +34,10 @@ def changed_chunks(before: str, after: str, path: str) -> list[ChunkChange]:
     reported. A section describing the class may well describe the behaviour
     that moved, and missing that is worse than checking it twice.
 
-    Chunks added or removed between the revisions are not reported. A section
-    describing a chunk that no longer exists is a finding in its own right and
-    needs git's rename detection to tell a deletion from a move; that is #10.
+    Chunks added or removed between the revisions are not reported, and nor are
+    whole files, which `git.modified_python_files` leaves out. A section
+    describing a chunk that no longer exists is a finding in its own right, and
+    telling a deletion from a move needs git's rename detection; that is #10.
     """
     was = _definitions(before)
     now = _definitions(after)

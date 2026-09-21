@@ -9,9 +9,8 @@ from pathlib import Path
 def modified_python_files(root: Path, base: str, head: str) -> list[str]:
     """The Python files that exist at both revisions and differ between them.
 
-    Files added or deleted by the change are left out. A section describing a
-    chunk that no longer exists is a finding of its own and needs git's rename
-    detection to tell a deletion from a move; that is #10.
+    Whole files added or deleted by the change are left out, for the reason
+    `changes.changed_chunks` gives about the chunks inside a file that survived.
     """
     listing = _git(
         root, "diff", "--name-only", "--diff-filter=M", base, head, "--", "*.py"

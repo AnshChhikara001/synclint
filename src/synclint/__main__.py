@@ -26,44 +26,42 @@ def main() -> None:
     )
     subcommands = parser.add_subparsers(dest="subcommand", required=True)
 
-    index = subcommands.add_parser("index", help="index a repository")
-    index.add_argument("root", type=Path, help="the repository to index")
-    index.add_argument(
+    index_parser = subcommands.add_parser("index", help="index a repository")
+    index_parser.add_argument("root", type=Path, help="the repository to index")
+    index_parser.add_argument(
         "--out",
         type=Path,
         help="file to write the index to; defaults to standard output",
     )
-    index.add_argument(
-        "--documentation-glob",
-        action="append",
-        dest="documentation_globs",
-        metavar="GLOB",
-        help=(
-            "pattern, relative to the repository, naming markdown that counts as "
-            f"documentation; repeatable, defaults to {' and '.join(DEFAULT_DOCUMENTATION_GLOBS)}"
-        ),
-    )
+    _add_documentation_glob(index_parser)
 
-    check = subcommands.add_parser("analyse", help="check a change against an index")
-    check.add_argument("root", type=Path, help="the repository to check")
-    check.add_argument("--base", required=True, help="the revision changed from")
-    check.add_argument("--head", required=True, help="the revision changed to")
-    check.add_argument(
+    analyse_parser = subcommands.add_parser(
+        "analyse", help="find the documentation a change invalidated"
+    )
+    analyse_parser.add_argument("root", type=Path, help="the repository to analyse")
+    analyse_parser.add_argument("--base", required=True, help="the revision changed from")
+    analyse_parser.add_argument("--head", required=True, help="the revision changed to")
+    analyse_parser.add_argument(
         "--index",
         type=Path,
         dest="index_path",
-        help="the index to check against; built in memory if not given",
+        help="the index to analyse against; built in memory if not given",
     )
-    check.add_argument(
-        "--model", default=DEFAULT_MODEL, help=f"the model to ask; defaults to {DEFAULT_MODEL}"
+    # An index built in memory has to be built the way the committed one was,
+    # so this subcommand takes the glob too.
+    _add_documentation_glob(analyse_parser)
+    analyse_parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"the model to ask; defaults to {DEFAULT_MODEL}",
     )
-    check.add_argument(
+    analyse_parser.add_argument(
         "--ceiling",
         type=float,
         default=DEFAULT_CEILING,
-        help=f"dollars this run may spend before it aborts; defaults to {DEFAULT_CEILING}",
+        help=f"dollars this run may spend before it stops; defaults to {DEFAULT_CEILING}",
     )
-    check.add_argument(
+    analyse_parser.add_argument(
         "--cache",
         type=Path,
         default=DEFAULT_CACHE,
@@ -75,6 +73,19 @@ def main() -> None:
         _index(arguments)
     else:
         _analyse(arguments)
+
+
+def _add_documentation_glob(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--documentation-glob",
+        action="append",
+        dest="documentation_globs",
+        metavar="GLOB",
+        help=(
+            "pattern, relative to the repository, naming markdown that counts as "
+            f"documentation; repeatable, defaults to {' and '.join(DEFAULT_DOCUMENTATION_GLOBS)}"
+        ),
+    )
 
 
 def _index(arguments: argparse.Namespace) -> None:
@@ -95,10 +106,11 @@ def _analyse(arguments: argparse.Namespace) -> None:
     # TODO: #11 decides what to do when the index is missing or older than the
     # base revision. Until then a missing one is rebuilt from the working tree,
     # which is the head revision rather than the base.
+    globs = arguments.documentation_globs or DEFAULT_DOCUMENTATION_GLOBS
     index = (
         Index.from_json(arguments.index_path.read_text(encoding="utf-8"))
         if arguments.index_path
-        else build_index(arguments.root)
+        else build_index(arguments.root, globs)
     )
     model = ModelClient(
         OpenAIModel(arguments.model),
@@ -108,18 +120,30 @@ def _analyse(arguments: argparse.Namespace) -> None:
     )
     report = analyse(arguments.root, index, arguments.base, arguments.head, model)
     sys.stdout.write(render(report))
+    if report.unchecked:
+        raise SystemExit(1)
 
 
 def render(report: Report) -> str:
     """Render a report for a terminal."""
     drifted = len(report.findings)
     lines = [
-        f"Checked {len(report.checked)} section{_plural(len(report.checked))}; "
+        f"Verified {len(report.verified)} section{_plural(len(report.verified))}; "
         f"{drifted} {'has' if drifted == 1 else 'have'} drifted.",
         "",
     ]
     for finding in report.findings:
-        lines += [f"{finding.section}  ({finding.chunk})", f"    {finding.explanation}", ""]
+        lines += [
+            f"{finding.section}  ({finding.chunk})",
+            f"    {finding.explanation}",
+            "",
+        ]
+    if report.unchecked:
+        lines += [
+            f"Stopped at the spend ceiling with {report.unchecked} "
+            f"section{_plural(report.unchecked)} unverified. Raise --ceiling to go on.",
+            "",
+        ]
     spend = report.spend
     lines.append(
         f"{spend.calls} model call{_plural(spend.calls)}, "
