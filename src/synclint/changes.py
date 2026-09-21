@@ -5,9 +5,10 @@ from __future__ import annotations
 import ast
 import copy
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from synclint.chunks import Definition, chunk_id, walk_definitions
+from synclint.git import file_at, modified_python_files
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,27 @@ class ChunkChange:
     @property
     def chunk(self) -> str:
         return chunk_id(self.path, self.qualname)
+
+
+def touched_chunks(root: Path, base: str, head: str) -> list[ChunkChange]:
+    """Every chunk in `root` that the change from `base` to `head` touched.
+
+    Test files are dropped whole: nothing in them can reach documentation.
+    """
+    changes: list[ChunkChange] = []
+    for path in modified_python_files(root, base, head):
+        if is_test_file(path):
+            continue
+        try:
+            changes.extend(
+                changed_chunks(file_at(root, base, path), file_at(root, head, path), path)
+            )
+        except SyntaxError:
+            # `build_index` skips the file this interpreter cannot parse rather
+            # than lose the whole index. A run has the same stake in one broken
+            # file, and a larger one: it is checking a change, not a snapshot.
+            continue
+    return changes
 
 
 def changed_chunks(before: str, after: str, path: str) -> list[ChunkChange]:

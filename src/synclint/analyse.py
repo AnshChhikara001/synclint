@@ -6,8 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from synclint.changes import ChunkChange, changed_chunks, is_test_file
-from synclint.git import file_at, modified_python_files
+from synclint.changes import ChunkChange, touched_chunks
 from synclint.index import Index
 from synclint.model import ModelClient, Spend, SpendCeilingExceeded
 from synclint.sections import Section
@@ -128,29 +127,10 @@ def suspects(root: Path, index: Index, base: str, head: str) -> list[Suspect]:
     sections = {section.id: section for section in index.sections}
     return [
         Suspect(section=sections[link.section], change=change)
-        for change in _changes(root, base, head)
+        for change in touched_chunks(root, base, head)
         for link in index.links
         if link.chunk == change.chunk and link.section in sections
     ]
-
-
-def _changes(root: Path, base: str, head: str) -> list[ChunkChange]:
-    changes: list[ChunkChange] = []
-    for path in modified_python_files(root, base, head):
-        if is_test_file(path):
-            continue
-        try:
-            changes.extend(
-                changed_chunks(
-                    file_at(root, base, path), file_at(root, head, path), path
-                )
-            )
-        except SyntaxError:
-            # `build_index` skips the file this interpreter cannot parse rather
-            # than lose the whole index. A run has the same stake in one broken
-            # file, and a larger one: it is checking a change, not a snapshot.
-            continue
-    return changes
 
 
 def _verify(model: ModelClient, suspect: Suspect) -> Finding | None:
