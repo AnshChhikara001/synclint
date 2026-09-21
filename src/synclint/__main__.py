@@ -4,9 +4,18 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tempfile
+from collections import Counter
 from pathlib import Path
 
 from synclint.analyse import Report, analyse
+from synclint.corpus import (
+    KINDS,
+    Corpus,
+    Validation,
+    build_corpus,
+    validate_corpus,
+)
 from synclint.index import DEFAULT_DOCUMENTATION_GLOBS, Index, build_index
 from synclint.model import DEFAULT_MODEL, PRICES, ModelClient, OpenAIModel
 
@@ -68,9 +77,22 @@ def main() -> None:
         help=f"directory of recorded model answers; defaults to {DEFAULT_CACHE}",
     )
 
+    corpus_parser = subcommands.add_parser(
+        "corpus", help="check the fixture corpus against its manifest"
+    )
+    corpus_parser.add_argument("source", type=Path, help="the corpus to check")
+    corpus_parser.add_argument(
+        "--build-to",
+        type=Path,
+        dest="build_to",
+        help="where to leave the built repository; a temporary directory by default",
+    )
+
     arguments = parser.parse_args()
     if arguments.subcommand == "index":
         _index(arguments)
+    elif arguments.subcommand == "corpus":
+        _corpus(arguments)
     else:
         _analyse(arguments)
 
@@ -95,6 +117,21 @@ def _index(arguments: argparse.Namespace) -> None:
         arguments.out.write_text(document, encoding="utf-8")
     else:
         sys.stdout.write(document)
+
+
+def _corpus(arguments: argparse.Namespace) -> None:
+    if arguments.build_to:
+        _check(build_corpus(arguments.source, arguments.build_to))
+        return
+    with tempfile.TemporaryDirectory() as directory:
+        _check(build_corpus(arguments.source, Path(directory) / "built"))
+
+
+def _check(corpus: Corpus) -> None:
+    validation = validate_corpus(corpus)
+    sys.stdout.write(render_validation(corpus, validation))
+    if validation.problems:
+        raise SystemExit(1)
 
 
 def _analyse(arguments: argparse.Namespace) -> None:
@@ -152,6 +189,32 @@ def render(report: Report) -> str:
         f"{spend.input_tokens} tokens in, {spend.output_tokens} out, "
         f"${spend.dollars:.4f} spent."
     )
+    return "\n".join(lines) + "\n"
+
+
+def render_validation(corpus: Corpus, validation: Validation) -> str:
+    """Render a checked corpus for a terminal."""
+    counts = Counter(case.kind for case in corpus.cases)
+    kinds = list(KINDS) + [kind for kind in counts if kind not in KINDS]
+    shape = ", ".join(f"{counts[kind]} {kind}" for kind in kinds if counts[kind])
+    reached = len(validation.reachable)
+    total = reached + len(validation.unreachable)
+    lines = [
+        f"{len(corpus.cases)} case{_plural(len(corpus.cases))}: {shape}.",
+        f"{reached} of {total} reachable as "
+        f"{'a suspect' if reached == 1 else 'suspects'}",
+    ]
+    if validation.unreachable:
+        lines[-1] += f"; {len(validation.unreachable)} unreachable:"
+        lines += [f"    {case}" for case in validation.unreachable]
+    else:
+        lines[-1] += "."
+    lines.append("")
+    if validation.problems:
+        lines.append(f"{len(validation.problems)} problem{_plural(len(validation.problems))}:")
+        lines += [f"    {problem}" for problem in validation.problems]
+    else:
+        lines.append("No problems.")
     return "\n".join(lines) + "\n"
 
 

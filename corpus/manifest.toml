@@ -1,0 +1,150 @@
+# Ground truth for the fixture corpus.
+#
+# Each case is one commit against `corpus/base`, and records the section that
+# commit should invalidate and the chunk whose change invalidates it. This is
+# written by hand and deliberately independent of what synclint can currently
+# detect: a case nothing reaches is a gap in the tool to be measured, not a
+# case to be rewritten.
+#
+# Kinds: renamed-parameter, changed-default, removed-capability,
+# undocumented-feature. Five of each.
+
+[[case]]
+id = "find-query-renamed"
+kind = "renamed-parameter"
+section = "docs/catalogue.md#Catalogue > Finding books"
+chunk = "bookshelf/catalogue.py::Catalogue.find"
+description = "find's query parameter is now called text"
+
+[[case]]
+id = "read-csv-path-renamed"
+kind = "renamed-parameter"
+section = "docs/importing.md#Importing > Reading a CSV"
+chunk = "bookshelf/importer.py::read_csv"
+description = "read_csv takes source rather than path"
+
+[[case]]
+id = "lend-borrower-renamed"
+kind = "renamed-parameter"
+section = "docs/loans.md#Loans > Lending a book"
+chunk = "bookshelf/loans.py::lend"
+description = "lend takes reader rather than borrower"
+
+[[case]]
+id = "normalise-raw-renamed"
+kind = "renamed-parameter"
+section = "docs/isbn.md#ISBNs > Normalising"
+chunk = "bookshelf/isbn.py::normalise"
+description = "normalise takes text rather than raw"
+
+[[case]]
+id = "write-json-path-renamed"
+kind = "renamed-parameter"
+section = "docs/exporting.md#Exporting > JSON"
+chunk = "bookshelf/exporter.py::write_json"
+description = "write_json takes destination rather than path"
+
+[[case]]
+id = "renew-days-default"
+kind = "changed-default"
+section = "docs/loans.md#Loans > Renewing"
+chunk = "bookshelf/loans.py::renew"
+description = "a renewal now runs seven days, not fourteen"
+
+[[case]]
+id = "write-csv-columns-default"
+kind = "changed-default"
+section = "docs/exporting.md#Exporting > CSV"
+chunk = "bookshelf/exporter.py::write_csv"
+description = "write_csv writes a year column as well by default"
+
+[[case]]
+id = "shelf-capacity-default"
+kind = "changed-default"
+section = "docs/shelves.md#Shelves > Capacity"
+chunk = "bookshelf/shelves.py::Shelf.__init__"
+description = "a shelf holds twenty-five books by default, not fifty"
+
+[[case]]
+id = "matches-case-sensitive-default"
+kind = "changed-default"
+section = "docs/searching.md#Searching > Matching"
+chunk = "bookshelf/search.py::matches"
+description = "matching is case sensitive by default now"
+
+[[case]]
+id = "read-csv-skip-invalid-default"
+kind = "changed-default"
+section = "docs/importing.md#Importing > Invalid rows"
+chunk = "bookshelf/importer.py::read_csv"
+description = "read_csv raises on an invalid row by default rather than skipping it"
+
+[[case]]
+id = "remove-returns-nothing"
+kind = "removed-capability"
+section = "docs/catalogue.md#Catalogue > Removing books"
+chunk = "bookshelf/catalogue.py::Catalogue.remove"
+description = "remove no longer returns the book it dropped"
+
+[[case]]
+id = "load-drops-create-missing"
+kind = "removed-capability"
+section = "docs/storage.md#Storage > Loading"
+chunk = "bookshelf/storage.py::load"
+description = "load no longer takes create_missing; a missing file always raises"
+
+[[case]]
+id = "parse-query-drops-or"
+kind = "removed-capability"
+section = "docs/searching.md#Searching > Query syntax"
+chunk = "bookshelf/search.py::parse_query"
+description = "OR alternatives are gone; every term is required"
+
+[[case]]
+id = "overdue-drops-grace"
+kind = "removed-capability"
+section = "docs/loans.md#Loans > Overdue loans"
+chunk = "bookshelf/loans.py::overdue"
+description = "overdue no longer takes grace_days"
+
+[[case]]
+id = "titles-drops-sort"
+kind = "removed-capability"
+section = "docs/shelves.md#Shelves > Listing titles"
+chunk = "bookshelf/shelves.py::Shelf.titles"
+description = "titles no longer takes sort; it is always alphabetical"
+
+[[case]]
+id = "find-gains-author-filter"
+kind = "undocumented-feature"
+section = "docs/catalogue.md#Catalogue > Finding books"
+chunk = "bookshelf/catalogue.py::Catalogue.find"
+description = "find takes an author filter the page never mentions"
+
+[[case]]
+id = "read-csv-gains-encoding"
+kind = "undocumented-feature"
+section = "docs/importing.md#Importing > Reading a CSV"
+chunk = "bookshelf/importer.py::read_csv"
+description = "read_csv takes an encoding the page never mentions"
+
+[[case]]
+id = "save-gains-compression"
+kind = "undocumented-feature"
+section = "docs/storage.md#Storage > Saving"
+chunk = "bookshelf/storage.py::save"
+description = "save can gzip the file, which the page never mentions"
+
+[[case]]
+id = "is-valid-gains-isbn10"
+kind = "undocumented-feature"
+section = "docs/isbn.md#ISBNs > Validating"
+chunk = "bookshelf/isbn.py::is_valid"
+description = "ten-digit ISBNs validate now, where the page says they never do"
+
+[[case]]
+id = "catalogue-gains-merge"
+kind = "undocumented-feature"
+section = "docs/catalogue.md#Catalogue"
+chunk = "bookshelf/catalogue.py::Catalogue.merge"
+description = "the catalogue gained merge and entries, which the page never lists"

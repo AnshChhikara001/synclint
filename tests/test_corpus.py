@@ -1,11 +1,17 @@
+from collections import Counter
 from pathlib import Path
 from textwrap import dedent
 
 import pytest
 
+from synclint.__main__ import render_validation
 from synclint.corpus import (
     BASE_REF,
+    KINDS,
+    Case,
+    Corpus,
     CorpusError,
+    Validation,
     build_corpus,
     case_ref,
     validate_corpus,
@@ -231,3 +237,61 @@ def test_an_unknown_kind_and_an_unclaimed_overlay_are_problems(tmp_path: Path) -
         "renamed-parameter, changed-default, removed-capability, undocumented-feature",
         "half-written: an overlay with no case in the manifest",
     )
+
+
+def test_the_command_line_prints_the_shape_the_reach_and_the_problems() -> None:
+    corpus = Corpus(
+        source=Path("corpus"),
+        root=Path("built"),
+        cases=(
+            Case(**FIND_QUERY_RENAMED),
+            Case(**SHELF_CAPACITY_DEFAULT),
+        ),
+    )
+    validation = Validation(
+        problems=("half-written: an overlay with no case in the manifest",),
+        reachable=("find-query-renamed",),
+        unreachable=("shelf-capacity-default",),
+    )
+
+    printed = render_validation(corpus, validation)
+
+    assert "2 cases: 1 renamed-parameter, 1 changed-default." in printed
+    assert "1 of 2 reachable as a suspect; 1 unreachable:" in printed
+    assert "    shelf-capacity-default" in printed
+    assert "1 problem:" in printed
+    assert "    half-written: an overlay with no case in the manifest" in printed
+
+
+def test_the_command_line_says_so_when_the_corpus_is_sound() -> None:
+    corpus = Corpus(
+        source=Path("corpus"), root=Path("built"), cases=(Case(**FIND_QUERY_RENAMED),)
+    )
+
+    printed = render_validation(
+        corpus, Validation(problems=(), reachable=("find-query-renamed",), unreachable=())
+    )
+
+    assert "1 of 1 reachable as a suspect." in printed
+    assert "No problems." in printed
+
+
+SHIPPED = Path(__file__).parent.parent / "corpus"
+
+
+def test_the_shipped_corpus_plants_twenty_cases_and_holds_together(
+    tmp_path: Path,
+) -> None:
+    corpus = build_corpus(SHIPPED, tmp_path / "built")
+
+    validation = validate_corpus(corpus)
+
+    assert validation.problems == ()
+    assert len(corpus.cases) == 20
+    kinds = Counter(case.kind for case in corpus.cases)
+    assert set(kinds) == set(KINDS)
+    assert min(kinds.values()) >= 4
+    # How many of them synclint reaches is a measurement rather than a
+    # requirement — the manifest is ground truth, and a case nothing reaches is
+    # a gap to be reported. What the corpus owes is an answer for every case.
+    assert len(validation.reachable) + len(validation.unreachable) == 20
