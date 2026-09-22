@@ -1,4 +1,4 @@
-"""Command line: build an index, or analyse a change against one."""
+"""Command line: build an index, analyse a change against one, or score the corpus."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import argparse
 import sys
 import tempfile
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 from synclint.analyse import Report, analyse
@@ -20,6 +20,7 @@ from synclint.corpus import (
 )
 from synclint.index import DEFAULT_DOCUMENTATION_GLOBS, Index, build_index
 from synclint.model import DEFAULT_MODEL, PRICES, ModelClient, OpenAIModel
+from synclint.score import Score, Scored, score_corpus
 
 # A run checks a handful of sections, which at the default model costs cents.
 # The ceiling is here for the run that is not typical — a pull request touching
@@ -28,9 +29,19 @@ DEFAULT_CEILING = 0.25
 
 DEFAULT_CACHE = Path(".cache/synclint")
 
+# The corpus's recorded answers live with the ground truth they are scored
+# against, and are committed: a published accuracy figure that cannot be
+# recomputed by whoever is reading it is a claim rather than a measurement.
+ANSWERS = Path("answers")
 
-def main() -> None:
-    """Run the subcommand named on the command line."""
+
+def main(argv: Sequence[str] | None = None) -> None:
+    """Run the subcommand named on the command line.
+
+    `argv` defaults to the real one. Tests pass their own, so that the
+    wiring each subcommand does before it reaches a renderer — which model
+    client, which gate, which exit code — is covered by something.
+    """
     parser = argparse.ArgumentParser(
         prog="synclint",
         description="Find the documentation a code change has made inaccurate.",
@@ -90,11 +101,42 @@ def main() -> None:
         help="where to leave the built repository; a temporary directory by default",
     )
 
-    arguments = parser.parse_args()
+    score_parser = subcommands.add_parser(
+        "score", help="score the fixture corpus against its ground truth"
+    )
+    score_parser.add_argument("source", type=Path, help="the corpus to score")
+    score_parser.add_argument(
+        "--answers",
+        type=Path,
+        help=(
+            "directory of recorded model answers to replay; "
+            f"defaults to {ANSWERS} under the corpus"
+        ),
+    )
+    score_parser.add_argument(
+        "--record",
+        action="store_true",
+        help="ask the model for the answers that are missing and record them; costs money",
+    )
+    score_parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"the model whose answers are scored; defaults to {DEFAULT_MODEL}",
+    )
+    score_parser.add_argument(
+        "--ceiling",
+        type=float,
+        default=DEFAULT_CEILING,
+        help=f"dollars a recording run may spend; defaults to {DEFAULT_CEILING}",
+    )
+
+    arguments = parser.parse_args(argv)
     if arguments.subcommand == "index":
         _index(arguments)
     elif arguments.subcommand == "corpus":
         _corpus(arguments)
+    elif arguments.subcommand == "score":
+        _score(arguments)
     else:
         _analyse(arguments)
 
@@ -134,6 +176,38 @@ def _audit(corpus: Corpus) -> None:
     sys.stdout.write(render_audit(audit))
     if audit.faults:
         raise SystemExit(1)
+
+
+def _score(arguments: argparse.Namespace) -> None:
+    if arguments.record and arguments.model not in PRICES:
+        raise SystemExit(
+            f"no price is recorded for {arguments.model}; the spend ceiling cannot "
+            f"be enforced without one. Known models: {', '.join(sorted(PRICES))}"
+        )
+    answers = arguments.answers or arguments.source / ANSWERS
+    with tempfile.TemporaryDirectory() as directory:
+        corpus = build_corpus(arguments.source, Path(directory) / "built")
+        # The audit gates the score. A number measured over a corpus with a
+        # fault in it would be measuring the corpus's mistakes as synclint's.
+        audit = audit_corpus(corpus)
+        if audit.faults:
+            sys.stdout.write(render_audit(audit))
+            raise SystemExit(1)
+        score = score_corpus(corpus, _scoring_model(arguments, answers))
+    sys.stdout.write(render_score(score))
+    if score.unrecorded or score.unfinished:
+        raise SystemExit(1)
+
+
+def _scoring_model(arguments: argparse.Namespace, answers: Path) -> ModelClient:
+    if not arguments.record:
+        return ModelClient.replaying(arguments.model, answers)
+    return ModelClient(
+        OpenAIModel(arguments.model),
+        pricing=PRICES[arguments.model],
+        ceiling=arguments.ceiling,
+        cache=answers,
+    )
 
 
 def _analyse(arguments: argparse.Namespace) -> None:
@@ -241,6 +315,115 @@ def _decoy_lines(audit: Audit) -> list[str]:
     else:
         lines.append("None reaches the model, so none can produce a finding.")
     return lines
+
+
+def render_score(score: Score) -> str:
+    """Render a scored corpus as markdown that can be pasted into the README.
+
+    A run that did not finish prints its gaps and no numbers at all. Precision
+    and recall over the branches that happened to be answered would be a
+    different measurement every time, and it would not say so on the page.
+    """
+    if score.unrecorded or score.unfinished:
+        return "\n".join(_gap_lines(score)) + "\n"
+    cases = [result for result in score.results if not result.decoy]
+    lines = _kind_lines(cases) + [""] + _rate_lines(score, cases)
+    if any(result.decoy for result in score.results):
+        lines += ["", _decoy_line(score)]
+    if score.false_positives:
+        lines += [""] + _false_positive_lines(score)
+    lines += [
+        "",
+        f"{score.spend.calls} model call{_plural(score.spend.calls)}, "
+        f"${score.spend.dollars:.4f} spent.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _gap_lines(score: Score) -> list[str]:
+    lines = ["The corpus was not scored in full, so there are no numbers.", ""]
+    if score.unrecorded:
+        one = len(score.unrecorded) == 1
+        lines += [
+            f"{len(score.unrecorded)} branch{'' if one else 'es'} "
+            f"{'has' if one else 'have'} no recorded answer:"
+        ]
+        lines += [f"    {entry}" for entry in score.unrecorded]
+        lines += ["", "Record them with --record, then score again.", ""]
+    if score.unfinished:
+        lines += [
+            f"{score.unfinished} suspect{_plural(score.unfinished)} were left "
+            "unverified at the spend ceiling. Raise --ceiling to go on.",
+            "",
+        ]
+    return lines[:-1]
+
+
+def _kind_lines(cases: list[Scored]) -> list[str]:
+    found = Counter(result.kind for result in cases if result.found)
+    planted = Counter(result.kind for result in cases)
+    declared = list(KINDS)
+    ordered = declared + [kind for kind in planted if kind not in declared]
+    rows = [
+        f"| {kind} | {planted[kind]} | {found[kind]} | {_percent(found[kind], planted[kind])} |"
+        for kind in ordered
+        if planted[kind]
+    ]
+    total = sum(planted.values())
+    return [
+        "| Drift kind | Planted | Found | Recall |",
+        "| --- | --- | --- | --- |",
+        *rows,
+        f"| All | {total} | {sum(found.values())} | "
+        f"{_percent(sum(found.values()), total)} |",
+    ]
+
+
+def _rate_lines(score: Score, cases: list[Scored]) -> list[str]:
+    return [
+        f"Precision {_rate(score.precision)} ({score.true_positives} true "
+        f"positive{_plural(score.true_positives)}, {score.false_positives} false "
+        f"positive{_plural(score.false_positives)}). "
+        f"Recall {_rate(score.recall)} ({score.true_positives} of {len(cases)} "
+        f"planted case{_plural(len(cases))})."
+    ]
+
+
+def _decoy_line(score: Score) -> str:
+    decoys = [result for result in score.results if result.decoy]
+    # Split because the two halves measure different things: a decoy that
+    # raises no suspect was ruled out by the design and costs nothing to be
+    # right about, and only the rest put the model's judgement to the test.
+    silent = [result for result in decoys if not result.verified]
+    reaching = [result for result in decoys if result.verified]
+    caught = sum(1 for result in reaching if result.spurious)
+    return (
+        f"{len(silent)} of {len(decoys)} decoys "
+        f"{'raises' if len(silent) == 1 else 'raise'} no suspect and cannot "
+        f"produce a finding; of the {len(reaching)} that "
+        f"{'reaches' if len(reaching) == 1 else 'reach'} the model, {caught} did."
+    )
+
+
+def _false_positive_lines(score: Score) -> list[str]:
+    lines = ["| False positive | Section | Chunk |", "| --- | --- | --- |"]
+    for result in score.results:
+        prefix = "decoy" if result.decoy else "case"
+        lines += [
+            f"| {prefix}/{result.id} | {finding.section} | {finding.chunk} |"
+            for finding in result.spurious
+        ]
+    return lines
+
+
+def _rate(rate: float | None) -> str:
+    # Nothing reported means nothing to be right or wrong about, and a zero
+    # there would read as a measurement rather than as the absence of one.
+    return "not measured" if rate is None else f"{rate * 100:.0f}%"
+
+
+def _percent(part: int, whole: int) -> str:
+    return "—" if whole == 0 else f"{part / whole * 100:.0f}%"
 
 
 def _shape(kinds: Iterable[str], order: Iterable[str] = KINDS) -> str:

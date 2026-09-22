@@ -48,6 +48,10 @@ class SpendCeilingExceeded(RuntimeError):
     """Raised instead of making the call that would take a run over its ceiling."""
 
 
+class AnswerNotRecorded(RuntimeError):
+    """Raised when a replaying client is asked something it has no recorded answer for."""
+
+
 class Model(Protocol):
     """The provider call. This is the injection point: tests supply their own."""
 
@@ -75,6 +79,20 @@ class ModelClient:
         self._ceiling = ceiling
         self._cache = cache
         self._spend = Spend()
+
+    @classmethod
+    def replaying(cls, model: str, answers: Path) -> ModelClient:
+        """A client that answers only from `answers` and cannot make a call at all.
+
+        The accuracy harness replays the corpus, so its numbers have to be free
+        and identical every time. Both halves of that are enforced here rather
+        than trusted: `RecordedOnly` has nothing to ask, and the zero price and
+        zero ceiling mean a miss cannot even reserve the call it would need.
+        What comes back instead is `AnswerNotRecorded`, naming the gap.
+        """
+        return cls(
+            RecordedOnly(model), pricing=Pricing(0.0, 0.0), ceiling=0.0, cache=answers
+        )
 
     def complete(self, system: str, user: str, schema: dict[str, object]) -> str:
         """Ask the model one question and return its answer as JSON matching `schema`.
@@ -145,6 +163,31 @@ class ModelClient:
                 f"{self._spend.dollars:.4f} spent of a {self._ceiling:.4f} ceiling; "
                 f"the next call could cost {worst_case:.4f}"
             )
+
+
+class RecordedOnly:
+    """A model with nothing to ask: every answer has to be on disk already.
+
+    Stands in for the provider where a run must not spend, so that a missing
+    answer surfaces as the gap in the recording that it is, rather than as a
+    call that quietly costs money and moves a published number.
+    """
+
+    # Nothing is ever generated, and the ceiling arithmetic still reads this.
+    max_output_tokens = 0
+
+    def __init__(self, name: str) -> None:
+        # The name of the model whose answers are being replayed: it is part of
+        # the cache key, so replaying under the wrong one finds nothing.
+        self.name = name
+
+    def complete(
+        self, system: str, user: str, schema: dict[str, object]
+    ) -> ModelResponse:
+        raise AnswerNotRecorded(
+            f"no recorded {self.name} answer for this question, and this client "
+            "cannot ask one"
+        )
 
 
 def _add(spend: Spend, response: ModelResponse, pricing: Pricing) -> Spend:
