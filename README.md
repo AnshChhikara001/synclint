@@ -8,11 +8,59 @@ capability is removed, and a paragraph somewhere in the repository is now a lie.
 Nothing fails and no test goes red. synclint runs on the pull request, while the
 author still has the context that makes fixing it a two-minute job.
 
-Under construction. The accuracy numbers this README will eventually carry do not
-exist yet; see `CONTEXT.md` for the vocabulary and `docs/adr/` for the decisions
-taken so far.
+## How it works
 
-They will come from `corpus/`: a small library with documentation, carrying twenty
-deliberately planted drift cases and the ground truth for each one. It has a README
-of its own covering how it is built, what is in it, and what synclint cannot yet
-find in it.
+Three operations with no hidden coupling. `build_index` walks a repository and
+records its chunks of code, its sections of prose, and the links between them.
+`analyse` takes that index and two git revisions, finds the sections linked to
+chunks the change touched, and asks a model whether each is still accurate.
+`publish` writes the result to GitHub. Neither of the first two needs network
+access to GitHub, so every judgement the tool makes is reachable offline.
+
+## What works today
+
+- **`build_index`** — chunks from `ast` (signature, docstring, decorators, never
+  bodies), sections from markdown split at every heading, links proposed by name
+  matching. Renders to JSON and reads back.
+- **`analyse`** — the modified files at two revisions, reduced to the chunks that
+  actually changed, reduced again to the sections linked to them, each put to the
+  model. Comments, formatting and docstring edits do not survive a parse and so
+  cannot produce a finding. Sections checked and found accurate are reported too,
+  so silence about a section means it was never in question.
+- **Spend control** — every model response cached on disk by prompt, a ledger of
+  tokens and dollars, and a ceiling checked before each call rather than after.
+- **Fixture corpus** — `corpus/` holds a small library with documentation and
+  twenty deliberately planted drift cases, with ground truth for each. See its
+  own README.
+
+Not yet built: the repair and validation passes, rules-gated confidence, the
+`publish` step, and the Action itself.
+
+## Measured so far
+
+55 tests, mypy strict, no API spend — every test replays a recorded answer or
+injects a fake. Of the twenty planted cases, **18 reach the model**: their
+expected section and chunk meet as a suspect, which is the ceiling on what a run
+could find before the model is asked anything.
+
+There are no accuracy numbers yet. Precision and recall need the decoy cases and
+the harness that scores them, and this README will carry those figures rather
+than an estimate of them.
+
+## Limitations
+
+- **Name matching is permissive and the false positive rate is bad.** Pointed at
+  this repository, every link it proposes is wrong — `id`, `write`, `spend` and
+  `git` all match as ordinary English words in prose. Embedding links are meant to
+  help; how much is a number this project owes, not a claim it makes.
+- **A default declared in a constructor is unreachable.** The default lives in
+  `__init__` while the prose names the class, so nothing links the two. Every
+  constructor default in every repository has this shape.
+- **A chunk the change adds is invisible.** Chunk comparison reports only chunks
+  present on both sides of a diff, so a newly added function the documentation
+  never mentions goes unreported.
+- **A pull request from a fork cannot be written to**, so repairs degrade to a
+  comment. Deliberate, and stated in the comment rather than failing quietly.
+
+`CONTEXT.md` is the glossary; `docs/adr/` holds the decisions and what was
+rejected.
