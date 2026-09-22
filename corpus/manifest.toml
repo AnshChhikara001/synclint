@@ -148,3 +148,61 @@ kind = "undocumented-feature"
 section = "docs/catalogue.md#Catalogue"
 chunk = "bookshelf/catalogue.py::Catalogue.merge"
 description = "the catalogue gained merge and entries, which the page never lists"
+
+# Decoys: changes that must produce no finding, so that a precision figure has
+# negative cases to be computed over. A decoy carries no section and no chunk
+# because what it asserts is an absence. Its kind is a claim about the change —
+# `internal-refactor` really does change a chunk, the other three really do not
+# — and the audit holds each decoy to it.
+#
+# Kinds: internal-refactor, comment-edit, formatting, test-only.
+
+[[decoy]]
+id = "is-valid-weights-hoisted"
+kind = "internal-refactor"
+description = "is_valid reads its weights from a named tuple"
+
+[[decoy]]
+id = "recent-sorts-by-a-named-key"
+kind = "internal-refactor"
+description = "recent sorts by a named key and filters through a predicate"
+
+[[decoy]]
+id = "matches-hoists-its-closure"
+kind = "internal-refactor"
+description = "matches hoists its closure to a module-level helper"
+
+[[decoy]]
+id = "save-extracts-the-backup"
+kind = "internal-refactor"
+description = "save takes its backup through a helper"
+
+[[decoy]]
+id = "isbn-checksum-explained"
+kind = "comment-edit"
+description = "the ISBN-13 checksum gets the comment it always needed"
+
+[[decoy]]
+id = "loans-dates-explained"
+kind = "comment-edit"
+description = "loans explains its date arithmetic"
+
+[[decoy]]
+id = "writers-reflowed"
+kind = "formatting"
+description = "the importer and exporter wrap at seventy-nine columns"
+
+[[decoy]]
+id = "queries-reflowed"
+kind = "formatting"
+description = "the catalogue and search wrap at seventy-nine columns"
+
+[[decoy]]
+id = "tests-cover-loans"
+kind = "test-only"
+description = "loans gains a test module"
+
+[[decoy]]
+id = "tests-cover-isbn-rejections"
+kind = "test-only"
+description = "the ISBN tests cover what is rejected, not only what is accepted"

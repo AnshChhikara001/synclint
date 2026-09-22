@@ -9,6 +9,7 @@ from synclint.__main__ import render_audit
 from synclint.analyse import analyse
 from synclint.corpus import (
     BASE_REF,
+    DECOY_KINDS,
     KINDS,
     Audit,
     Case,
@@ -564,12 +565,18 @@ def shipped(tmp_path_factory: pytest.TempPathFactory) -> Corpus:
     return build_corpus(SHIPPED, tmp_path_factory.mktemp("shipped") / "built")
 
 
+@pytest.fixture(scope="module")
+def audited(shipped: Corpus) -> Audit:
+    """The shipped corpus audited once: thirty branches is not a cheap answer."""
+    return audit_corpus(shipped)
+
+
 def test_the_shipped_corpus_plants_twenty_cases_and_holds_together(
-    shipped: Corpus,
+    shipped: Corpus, audited: Audit
 ) -> None:
     corpus = shipped
 
-    audit = audit_corpus(corpus)
+    audit = audited
 
     assert audit.faults == ()
     assert len(corpus.cases) == 20
@@ -646,7 +653,7 @@ class DriftedModel:
 
 
 def test_analyse_over_the_corpus_reports_the_cases_the_manifest_expects(
-    shipped: Corpus,
+    shipped: Corpus, audited: Audit
 ) -> None:
     index = build_index(shipped.root)
 
@@ -665,5 +672,55 @@ def test_analyse_over_the_corpus_reports_the_cases_the_manifest_expects(
     # run reached — so this is the audit's reachability figure arrived at through
     # the real entry point rather than through `suspects` alone. Whether the
     # model agrees for the right reasons is the accuracy harness's question.
-    assert reported == set(audit_corpus(shipped).reachable)
+    assert reported == set(audited.reachable)
     assert reported
+
+
+def test_the_shipped_corpus_plants_ten_decoys_across_every_kind(
+    shipped: Corpus, audited: Audit
+) -> None:
+    assert audited.faults == ()
+    assert len(shipped.decoys) == 10
+    kinds = Counter(decoy.kind for decoy in shipped.decoys)
+    assert set(kinds) == set(DECOY_KINDS)
+    assert min(kinds.values()) >= 2
+
+
+def test_a_decoy_nothing_reaches_cannot_produce_a_finding(
+    shipped: Corpus, audited: Audit
+) -> None:
+    index = build_index(shipped.root)
+    silent = [
+        decoy.id for decoy in shipped.decoys if decoy.id not in audited.suspected
+    ]
+
+    assert len(silent) == 6
+    for decoy_id in silent:
+        client = ModelClient(
+            DriftedModel(), pricing=Pricing(input=0.0, output=0.0), ceiling=1.0
+        )
+        report = analyse(shipped.root, index, BASE_REF, decoy_ref(decoy_id), client)
+
+        # Asked with a model that calls everything drift, these six still report
+        # nothing: comments, formatting and test code do not survive a parse, so
+        # there is no suspect to put a question about and nothing is spent.
+        assert report.findings == ()
+        assert report.spend.calls == 0
+
+
+def test_a_decoy_that_reaches_the_model_is_only_cleared_by_its_judgement(
+    shipped: Corpus, audited: Audit
+) -> None:
+    index = build_index(shipped.root)
+
+    assert audited.suspected
+    for decoy_id in audited.suspected:
+        client = ModelClient(
+            DriftedModel(), pricing=Pricing(input=0.0, output=0.0), ceiling=1.0
+        )
+        report = analyse(shipped.root, index, BASE_REF, decoy_ref(decoy_id), client)
+
+        # The other four are false positives the moment the model says so, which
+        # is what makes them worth having: nothing structural saves them, and the
+        # rate at which a real model clears them is the precision figure #6 owes.
+        assert report.findings
