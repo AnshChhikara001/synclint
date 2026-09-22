@@ -74,8 +74,8 @@ _Avoid_: budget, limit, cap, quota
 
 **Recorded answer**:
 One model response saved to disk under a hash of the question that produced it, so that asking again replays it instead of paying for it. The corpus's recorded answers are committed, because a published accuracy figure nobody else can recompute is a claim rather than a measurement.
-_Avoid_: cached response, fixture, recording, snapshot
+_Avoid_: cached response, fixture, snapshot
 
 **Score**:
 Every finding a run over the corpus produced, matched against the ground truth: true positives, false positives, false negatives, and the precision and recall computed from them. Distinct from reach, which is what the corpus can say for free; a score costs a model pass, and after the first one it costs nothing again.
-_Avoid_: accuracy, results, metrics, evaluation, benchmark
+_Avoid_: results, metrics, evaluation, benchmark

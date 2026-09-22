@@ -168,8 +168,8 @@ class ModelClient:
 class RecordedOnly:
     """A model with nothing to ask: every answer has to be on disk already.
 
-    Stands in for the provider where a run must not spend, so that a missing
-    answer surfaces as the gap in the recording that it is, rather than as a
+    Stands in for the provider where a run must not spend, so that a question
+    nothing was ever recorded for surfaces as the gap it is, rather than as a
     call that quietly costs money and moves a published number.
     """
 

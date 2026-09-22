@@ -1,4 +1,4 @@
-"""The accuracy harness: every finding the corpus produces, matched against ground truth."""
+"""Scoring the corpus: every finding a run produced, matched against ground truth."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ class Score:
     so a caller that is about to publish them has to refuse.
     """
 
-    results: tuple[Scored, ...]
+    branches: tuple[Scored, ...]
     unrecorded: tuple[str, ...]
     unfinished: int
     spend: Spend
@@ -51,17 +51,17 @@ class Score:
     @property
     def true_positives(self) -> int:
         """Planted findings the run reported."""
-        return sum(1 for result in self.results if result.found)
+        return sum(1 for branch in self.branches if branch.found)
 
     @property
     def false_negatives(self) -> int:
         """Planted findings the run missed."""
-        return sum(1 for result in self.results if not result.decoy and not result.found)
+        return sum(1 for branch in self.branches if not branch.decoy and not branch.found)
 
     @property
     def false_positives(self) -> int:
         """Findings nothing planted, on a decoy branch or beside a planted one."""
-        return sum(len(result.spurious) for result in self.results)
+        return sum(len(branch.spurious) for branch in self.branches)
 
     @property
     def precision(self) -> float | None:
@@ -76,6 +76,23 @@ class Score:
         return self.true_positives / planted if planted else None
 
 
+@dataclass(frozen=True)
+class _Branch:
+    """One branch to run, and the finding it owes.
+
+    `planted` is the section and chunk a case is expected to invalidate, and is
+    `None` for a decoy, which owes nothing. Carrying the difference as data
+    rather than as two loops is what lets a decoy be scored by the same rule as
+    a case: no finding matches what was never planted.
+    """
+
+    id: str
+    kind: str
+    decoy: bool
+    ref: str
+    planted: tuple[str, str] | None
+
+
 def score_corpus(corpus: Corpus, model: ModelClient) -> Score:
     """Run `analyse` over every case and decoy branch and match the findings to ground truth.
 
@@ -85,58 +102,63 @@ def score_corpus(corpus: Corpus, model: ModelClient) -> Score:
 
     A branch whose answers are not recorded is skipped and named in the score
     rather than allowed to spend: replaying the corpus has to be free, and a
-    number computed over the branches that happened to be cached would be a
+    number computed over the branches that happened to be recorded would be a
     different measurement every time.
     """
     index = build_index(corpus.root)
-    results: list[Scored] = []
+    scored: list[Scored] = []
     unrecorded: list[str] = []
     unfinished = 0
 
-    for case in corpus.cases:
+    for branch in _branches(corpus):
         try:
-            report = analyse(corpus.root, index, BASE_REF, case_ref(case.id), model)
+            report = analyse(corpus.root, index, BASE_REF, branch.ref, model)
         except AnswerNotRecorded:
-            unrecorded.append(case.id)
+            unrecorded.append(branch.id)
             continue
         unfinished += report.unchecked
-        planted = (case.section, case.chunk)
-        results.append(
+        reported = {(finding.section, finding.chunk) for finding in report.findings}
+        scored.append(
             Scored(
-                id=case.id,
-                kind=case.kind,
-                decoy=False,
+                id=branch.id,
+                kind=branch.kind,
+                decoy=branch.decoy,
                 verified=len(report.verified),
-                found=planted in {(f.section, f.chunk) for f in report.findings},
+                found=branch.planted in reported,
                 spurious=tuple(
                     finding
                     for finding in report.findings
-                    if (finding.section, finding.chunk) != planted
+                    if (finding.section, finding.chunk) != branch.planted
                 ),
             )
         )
 
-    for decoy in corpus.decoys:
-        try:
-            report = analyse(corpus.root, index, BASE_REF, decoy_ref(decoy.id), model)
-        except AnswerNotRecorded:
-            unrecorded.append(decoy.id)
-            continue
-        unfinished += report.unchecked
-        results.append(
-            Scored(
-                id=decoy.id,
-                kind=decoy.kind,
-                decoy=True,
-                verified=len(report.verified),
-                found=False,
-                spurious=report.findings,
-            )
-        )
-
     return Score(
-        results=tuple(results),
+        branches=tuple(scored),
         unrecorded=tuple(unrecorded),
         unfinished=unfinished,
         spend=model.spend,
     )
+
+
+def _branches(corpus: Corpus) -> list[_Branch]:
+    """Every branch to run, cases first, in the order the manifest writes them down."""
+    return [
+        _Branch(
+            id=case.id,
+            kind=case.kind,
+            decoy=False,
+            ref=case_ref(case.id),
+            planted=(case.section, case.chunk),
+        )
+        for case in corpus.cases
+    ] + [
+        _Branch(
+            id=decoy.id,
+            kind=decoy.kind,
+            decoy=True,
+            ref=decoy_ref(decoy.id),
+            planted=None,
+        )
+        for decoy in corpus.decoys
+    ]

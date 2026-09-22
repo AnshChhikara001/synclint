@@ -106,14 +106,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     score_parser.add_argument("source", type=Path, help="the corpus to score")
     score_parser.add_argument(
-        "--answers",
-        type=Path,
-        help=(
-            "directory of recorded model answers to replay; "
-            f"defaults to {ANSWERS} under the corpus"
-        ),
-    )
-    score_parser.add_argument(
         "--record",
         action="store_true",
         help="ask the model for the answers that are missing and record them; costs money",
@@ -179,12 +171,14 @@ def _audit(corpus: Corpus) -> None:
 
 
 def _score(arguments: argparse.Namespace) -> None:
-    if arguments.record and arguments.model not in PRICES:
-        raise SystemExit(
-            f"no price is recorded for {arguments.model}; the spend ceiling cannot "
-            f"be enforced without one. Known models: {', '.join(sorted(PRICES))}"
-        )
-    answers = arguments.answers or arguments.source / ANSWERS
+    answers = arguments.source / ANSWERS
+    # Replaying needs no price, because it cannot spend. Recording does, and
+    # the check has to happen before the corpus is built rather than after.
+    model = (
+        _paying_client(arguments, answers)
+        if arguments.record
+        else ModelClient.replaying(arguments.model, answers)
+    )
     with tempfile.TemporaryDirectory() as directory:
         corpus = build_corpus(arguments.source, Path(directory) / "built")
         # The audit gates the score. A number measured over a corpus with a
@@ -193,29 +187,33 @@ def _score(arguments: argparse.Namespace) -> None:
         if audit.faults:
             sys.stdout.write(render_audit(audit))
             raise SystemExit(1)
-        score = score_corpus(corpus, _scoring_model(arguments, answers))
+        score = score_corpus(corpus, model)
     sys.stdout.write(render_score(score))
     if score.unrecorded or score.unfinished:
         raise SystemExit(1)
 
 
-def _scoring_model(arguments: argparse.Namespace, answers: Path) -> ModelClient:
-    if not arguments.record:
-        return ModelClient.replaying(arguments.model, answers)
-    return ModelClient(
-        OpenAIModel(arguments.model),
-        pricing=PRICES[arguments.model],
-        ceiling=arguments.ceiling,
-        cache=answers,
-    )
+def _paying_client(arguments: argparse.Namespace, cache: Path) -> ModelClient:
+    """A client that can spend, refused outright for a model with no published price.
 
-
-def _analyse(arguments: argparse.Namespace) -> None:
+    The ceiling is only as honest as the price behind it, so a model synclint
+    has never been run against is turned away rather than priced at zero.
+    """
     if arguments.model not in PRICES:
         raise SystemExit(
             f"no price is recorded for {arguments.model}; the spend ceiling cannot "
             f"be enforced without one. Known models: {', '.join(sorted(PRICES))}"
         )
+    return ModelClient(
+        OpenAIModel(arguments.model),
+        pricing=PRICES[arguments.model],
+        ceiling=arguments.ceiling,
+        cache=cache,
+    )
+
+
+def _analyse(arguments: argparse.Namespace) -> None:
+    model = _paying_client(arguments, arguments.cache)
     # TODO: #11 decides what to do when the index is missing or older than the
     # base revision. Until then a missing one is rebuilt from the working tree,
     # which is the head revision rather than the base.
@@ -224,12 +222,6 @@ def _analyse(arguments: argparse.Namespace) -> None:
         Index.from_json(arguments.index_path.read_text(encoding="utf-8"))
         if arguments.index_path
         else build_index(arguments.root, globs)
-    )
-    model = ModelClient(
-        OpenAIModel(arguments.model),
-        pricing=PRICES[arguments.model],
-        ceiling=arguments.ceiling,
-        cache=arguments.cache,
     )
     report = analyse(arguments.root, index, arguments.base, arguments.head, model)
     sys.stdout.write(render(report))
@@ -326,10 +318,9 @@ def render_score(score: Score) -> str:
     """
     if score.unrecorded or score.unfinished:
         return "\n".join(_gap_lines(score)) + "\n"
-    cases = [result for result in score.results if not result.decoy]
-    lines = _kind_lines(cases) + [""] + _rate_lines(score, cases)
-    if any(result.decoy for result in score.results):
-        lines += ["", _decoy_line(score)]
+    lines = _kind_lines(score) + [""] + _rate_lines(score)
+    if any(branch.decoy for branch in score.branches):
+        lines += ["", *_decoy_kind_lines(score), "", _decoy_line(score)]
     if score.false_positives:
         lines += [""] + _false_positive_lines(score)
     lines += [
@@ -341,27 +332,35 @@ def render_score(score: Score) -> str:
 
 
 def _gap_lines(score: Score) -> list[str]:
-    lines = ["The corpus was not scored in full, so there are no numbers.", ""]
+    reasons: list[list[str]] = []
     if score.unrecorded:
         one = len(score.unrecorded) == 1
-        lines += [
-            f"{len(score.unrecorded)} branch{'' if one else 'es'} "
-            f"{'has' if one else 'have'} no recorded answer:"
-        ]
-        lines += [f"    {entry}" for entry in score.unrecorded]
-        lines += ["", "Record them with --record, then score again.", ""]
+        reasons.append(
+            [
+                f"{len(score.unrecorded)} branch{'' if one else 'es'} "
+                f"{'has' if one else 'have'} no recorded answer:",
+                *(f"    {entry}" for entry in score.unrecorded),
+                "",
+                "Record them with --record, then score again.",
+            ]
+        )
     if score.unfinished:
-        lines += [
-            f"{score.unfinished} suspect{_plural(score.unfinished)} were left "
-            "unverified at the spend ceiling. Raise --ceiling to go on.",
-            "",
-        ]
-    return lines[:-1]
+        reasons.append(
+            [
+                f"{score.unfinished} suspect{_plural(score.unfinished)} were left "
+                "unverified at the spend ceiling. Raise --ceiling to go on."
+            ]
+        )
+    lines = ["The corpus was not scored in full, so there are no numbers."]
+    for reason in reasons:
+        lines += ["", *reason]
+    return lines
 
 
-def _kind_lines(cases: list[Scored]) -> list[str]:
-    found = Counter(result.kind for result in cases if result.found)
-    planted = Counter(result.kind for result in cases)
+def _kind_lines(score: Score) -> list[str]:
+    cases = [branch for branch in score.branches if not branch.decoy]
+    found = Counter(branch.kind for branch in cases if branch.found)
+    planted = Counter(branch.kind for branch in cases)
     declared = list(KINDS)
     ordered = declared + [kind for kind in planted if kind not in declared]
     rows = [
@@ -379,24 +378,66 @@ def _kind_lines(cases: list[Scored]) -> list[str]:
     ]
 
 
-def _rate_lines(score: Score, cases: list[Scored]) -> list[str]:
+def _rate_lines(score: Score) -> list[str]:
+    # All three counts are named rather than left to be subtracted: a false
+    # negative is the number this project is worst at and least able to hide.
     return [
         f"Precision {_rate(score.precision)} ({score.true_positives} true "
         f"positive{_plural(score.true_positives)}, {score.false_positives} false "
         f"positive{_plural(score.false_positives)}). "
-        f"Recall {_rate(score.recall)} ({score.true_positives} of {len(cases)} "
-        f"planted case{_plural(len(cases))})."
+        f"Recall {_rate(score.recall)} ({score.true_positives} true "
+        f"positive{_plural(score.true_positives)}, {score.false_negatives} false "
+        f"negative{_plural(score.false_negatives)})."
     ]
 
 
+def _decoy_kind_lines(score: Score) -> list[str]:
+    """The decoy half of the breakdown: what each kind reaches, and what it cost.
+
+    Reach is carried beside the false positives because a kind with none of
+    either has earned nothing — six of the ten decoys cannot produce a finding
+    whatever a model says, and a table without that column would read as though
+    the judgement had cleared them.
+    """
+    decoys = [branch for branch in score.branches if branch.decoy]
+    counts = Counter(branch.kind for branch in decoys)
+    declared = list(DECOY_KINDS)
+    ordered = declared + [kind for kind in counts if kind not in declared]
+    rows = [
+        f"| {kind} | {counts[kind]} | {_reaching(decoys, kind)} | "
+        f"{_spurious(decoys, kind)} |"
+        for kind in ordered
+        if counts[kind]
+    ]
+    return [
+        "| Decoy kind | Decoys | Reach the model | False positives |",
+        "| --- | --- | --- | --- |",
+        *rows,
+        f"| All | {len(decoys)} | {_reaching(decoys, None)} | "
+        f"{_spurious(decoys, None)} |",
+    ]
+
+
+def _reaching(decoys: list[Scored], kind: str | None) -> int:
+    return sum(
+        1 for branch in decoys if branch.verified and kind in (None, branch.kind)
+    )
+
+
+def _spurious(decoys: list[Scored], kind: str | None) -> int:
+    return sum(
+        len(branch.spurious) for branch in decoys if kind in (None, branch.kind)
+    )
+
+
 def _decoy_line(score: Score) -> str:
-    decoys = [result for result in score.results if result.decoy]
+    decoys = [branch for branch in score.branches if branch.decoy]
     # Split because the two halves measure different things: a decoy that
     # raises no suspect was ruled out by the design and costs nothing to be
     # right about, and only the rest put the model's judgement to the test.
-    silent = [result for result in decoys if not result.verified]
-    reaching = [result for result in decoys if result.verified]
-    caught = sum(1 for result in reaching if result.spurious)
+    silent = [branch for branch in decoys if not branch.verified]
+    reaching = [branch for branch in decoys if branch.verified]
+    caught = sum(1 for branch in reaching if branch.spurious)
     return (
         f"{len(silent)} of {len(decoys)} decoys "
         f"{'raises' if len(silent) == 1 else 'raise'} no suspect and cannot "
@@ -407,11 +448,11 @@ def _decoy_line(score: Score) -> str:
 
 def _false_positive_lines(score: Score) -> list[str]:
     lines = ["| False positive | Section | Chunk |", "| --- | --- | --- |"]
-    for result in score.results:
-        prefix = "decoy" if result.decoy else "case"
+    for branch in score.branches:
+        prefix = "decoy" if branch.decoy else "case"
         lines += [
-            f"| {prefix}/{result.id} | {finding.section} | {finding.chunk} |"
-            for finding in result.spurious
+            f"| {prefix}/{branch.id} | {finding.section} | {finding.chunk} |"
+            for finding in branch.spurious
         ]
     return lines
 
@@ -419,11 +460,11 @@ def _false_positive_lines(score: Score) -> list[str]:
 def _rate(rate: float | None) -> str:
     # Nothing reported means nothing to be right or wrong about, and a zero
     # there would read as a measurement rather than as the absence of one.
-    return "not measured" if rate is None else f"{rate * 100:.0f}%"
+    return "—" if rate is None else f"{rate * 100:.0f}%"
 
 
 def _percent(part: int, whole: int) -> str:
-    return "—" if whole == 0 else f"{part / whole * 100:.0f}%"
+    return _rate(part / whole if whole else None)
 
 
 def _shape(kinds: Iterable[str], order: Iterable[str] = KINDS) -> str:

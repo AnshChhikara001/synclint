@@ -184,7 +184,7 @@ def test_a_finding_on_a_decoy_branch_is_a_false_positive(tmp_path: Path) -> None
     assert score.false_positives == 1
     assert score.precision == 0.5
     assert score.recall == 1.0
-    decoy = next(result for result in score.results if result.decoy)
+    decoy = next(result for result in score.branches if result.decoy)
     assert decoy.id == "find-keeps-its-result"
     assert [finding.section for finding in decoy.spurious] == [FIND_SECTION]
 
@@ -195,7 +195,7 @@ def test_a_decoy_the_model_clears_reports_nothing(tmp_path: Path) -> None:
 
     score = score_corpus(build_corpus(source, tmp_path / "built"), asked)
 
-    decoy = next(result for result in score.results if result.decoy)
+    decoy = next(result for result in score.branches if result.decoy)
     assert decoy.spurious == ()
     # It still reached the model, which is what separates a decoy the judgement
     # cleared from one the design ruled out before anything was asked.
@@ -232,7 +232,7 @@ def test_a_finding_beside_the_planted_one_is_a_false_positive(tmp_path: Path) ->
     # counts exactly as one on a decoy does.
     assert score.true_positives == 1
     assert score.false_positives == 1
-    assert [finding.section for finding in score.results[0].spurious] == [
+    assert [finding.section for finding in score.branches[0].spurious] == [
         "docs/catalogue.md#Catalogue > Performance"
     ]
 
@@ -277,7 +277,7 @@ def test_a_branch_with_no_recorded_answer_is_named_rather_than_asked(
     score = score_corpus(corpus, ModelClient.replaying("deciding-model", tmp_path / "empty"))
 
     assert score.unrecorded == ("find-query-renamed",)
-    assert score.results == ()
+    assert score.branches == ()
     assert score.spend == Spend()
 
 
@@ -314,7 +314,7 @@ def scored(**fields: object) -> Scored:
 
 def test_the_report_breaks_recall_down_by_drift_kind() -> None:
     score = Score(
-        results=(
+        branches=(
             scored(id="a", kind="renamed-parameter", found=True),
             scored(id="b", kind="renamed-parameter", found=False),
             scored(id="c", kind="changed-default", found=True),
@@ -335,7 +335,7 @@ def test_the_report_breaks_recall_down_by_drift_kind() -> None:
 
 def test_the_report_carries_precision_recall_and_what_it_cost() -> None:
     score = Score(
-        results=(
+        branches=(
             scored(id="a", found=True),
             scored(id="b", found=False),
             scored(
@@ -354,14 +354,14 @@ def test_the_report_carries_precision_recall_and_what_it_cost() -> None:
     report = render_score(score)
 
     assert "Precision 50% (1 true positive, 1 false positive)" in report
-    assert "Recall 50% (1 of 2 planted cases)" in report
+    assert "Recall 50% (1 true positive, 1 false negative)" in report
     assert "$0.0000" in report
     assert "| decoy/c | docs/a.md#A | a.py::f |" in report
 
 
 def test_the_report_refuses_to_print_numbers_from_a_partial_run() -> None:
     score = Score(
-        results=(scored(id="a", found=True),),
+        branches=(scored(id="a", found=True),),
         unrecorded=("b", "c"),
         unfinished=4,
         spend=Spend(),
@@ -378,7 +378,7 @@ def test_the_report_refuses_to_print_numbers_from_a_partial_run() -> None:
 
 def test_a_decoy_that_raises_no_suspect_is_counted_apart_from_one_the_model_cleared() -> None:
     score = Score(
-        results=(
+        branches=(
             scored(id="a", found=True),
             scored(id="silent", kind="formatting", decoy=True, verified=0, found=False),
             scored(id="cleared", kind="internal-refactor", decoy=True, verified=1, found=False),
@@ -394,6 +394,11 @@ def test_a_decoy_that_raises_no_suspect_is_counted_apart_from_one_the_model_clea
         "1 of 2 decoys raises no suspect and cannot produce a finding; "
         "of the 1 that reaches the model, 0 did." in report
     )
+    # The same split as a table, which is where the decoy half of the
+    # by-kind breakdown lives.
+    assert "| formatting | 1 | 0 | 0 |" in report
+    assert "| internal-refactor | 1 | 1 | 0 |" in report
+    assert "| All | 2 | 1 | 0 |" in report
 
 
 def test_the_command_line_scores_a_corpus_from_its_recorded_answers(
@@ -514,7 +519,7 @@ def test_the_shipped_corpus_scores_what_the_readme_publishes(shipped: Corpus) ->
     assert score.precision == 1.0
 
     reached = [
-        result for result in score.results if result.decoy and result.verified
+        result for result in score.branches if result.decoy and result.verified
     ]
     assert len(reached) == 4
     assert all(result.spurious == () for result in reached)

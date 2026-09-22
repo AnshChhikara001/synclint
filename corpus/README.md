@@ -114,8 +114,15 @@ Scoring replays those and cannot do anything else. The client it runs on has no
 provider behind it and a zero ceiling against a zero price, so a question with
 no recorded answer comes back as a gap rather than as a call — and a run missing
 any answer prints the gaps and no numbers at all. Numbers computed over whichever
-branches happened to be cached would be a different measurement every time and
-would not say so on the page.
+branches happened to have an answer on disk would be a different measurement
+every time and would not say so on the page.
+
+A case branch is held to the one finding the manifest planted, so a second
+finding on it counts against precision even if a reader would call it fair. That
+is stricter than measuring false positives on the decoys alone, and deliberately
+so: the manifest says what each case should invalidate, and a tool that reports
+three sections to get one right is not precise. It can only push the number
+down, never up.
 
 Recording is the one pass that costs money, and it is the flag that asks for it:
 

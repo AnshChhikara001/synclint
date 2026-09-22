@@ -62,19 +62,21 @@ Precision is perfect because the model is conservative, and that conservatism is
 where half the recall goes. Two of the ten misses never reach the model, and the
 other eight are suspects it saw and cleared:
 
-- **Four of the five `undocumented-feature` cases**, because the verification
+- **Four of the five `renamed-parameter` cases.** `find(query)` documented,
+  `find(text)` shipped, and the model judged that a reader following the page is
+  not misled. Anyone calling it by keyword gets a `TypeError`.
+- **Three of the five `undocumented-feature` cases**, because the verification
   prompt tells it to clear them: *a section that never mentioned the thing that
   changed has not drifted*. The prompt and the corpus disagree about whether a
   documented function quietly gaining a parameter is drift. One of them is
   wrong, and this is the number that says so.
-- **Four of the five `renamed-parameter` cases.** `find(query)` documented,
-  `find(text)` shipped, and the model judged that a reader following the page is
-  not misled. Anyone calling it by keyword gets a `TypeError`.
-- **Two are out of reach before anything is asked** — a default that lives in
-  `__init__` while the prose names the class, and a wholly new method. Both are
-  recorded in the manifest as the gaps in the tool that they are.
+- **One `changed-default` case**, where `read_csv` stopped skipping invalid rows
+  and started raising on them.
+- **Two never reach the model at all** — a default that lives in `__init__`
+  while the prose names the class, and a wholly new method. Both are recorded
+  in the manifest as the gaps in the tool that they are.
 
-85 tests, mypy strict, no API spend in the suite — every test replays a recorded
+88 tests, mypy strict, no API spend in the suite — every test replays a recorded
 answer or injects a fake.
 
 ## Limitations
