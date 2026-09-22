@@ -227,8 +227,11 @@ PRICES = {
     "gpt-5.4-nano": Pricing(input=0.20, output=1.25),
 }
 
-# The whole project has $2 to spend. #6 measures whether the larger model earns
-# its price; until then the cheap one is the honest default.
+# The whole project has $2 to spend, and the corpus scores 50% recall at 100%
+# precision on this one for two cents.
+# TODO: whether a larger model earns its price is now one recording run away —
+# `score corpus --record --model gpt-5.4` writes its answers under their own
+# keys, so both figures can stand side by side. Not spent yet.
 DEFAULT_MODEL = "gpt-5.4-mini"
 
 
@@ -238,8 +241,11 @@ class OpenAIModel:
     # Reasoning tokens are billed as output and count against this, so it has
     # to leave room for thinking as well as for the answer, which is one
     # sentence. Verification is a short judgement over a little text rather
-    # than a hard reasoning problem, hence the low effort; #6 measures whether
-    # either is set too mean.
+    # than a hard reasoning problem, hence the low effort.
+    # TODO: the corpus now says this judgement is too conservative — eight of
+    # twenty planted cases reach the model and are cleared by it. Whether the
+    # effort or the prompt is the cause is a re-record away, and neither has
+    # been changed yet, because the first number has to be the untuned one.
     max_output_tokens = 2048
     _EFFORT: ReasoningEffort = "low"
 

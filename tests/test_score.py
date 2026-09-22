@@ -7,8 +7,8 @@ import pytest
 
 from synclint.__main__ import ANSWERS, main, render_score
 from synclint.analyse import Finding
-from synclint.corpus import build_corpus
-from synclint.model import ModelClient, ModelResponse, Pricing, Spend
+from synclint.corpus import Corpus, build_corpus
+from synclint.model import DEFAULT_MODEL, ModelClient, ModelResponse, Pricing, Spend
 from synclint.score import Score, Scored, score_corpus
 
 PRICING = Pricing(input=1.00, output=2.00)
@@ -467,3 +467,54 @@ def test_the_command_line_will_not_score_a_corpus_with_a_fault(
     # The audit's own report, not a score: a number measured over a corpus
     # that is wrong about itself would be measuring the wrong thing.
     assert "1 fault:" in capsys.readouterr().out
+
+
+SHIPPED = Path(__file__).parent.parent / "corpus"
+
+
+@pytest.fixture(scope="module")
+def shipped(tmp_path_factory: pytest.TempPathFactory) -> Corpus:
+    """The shipped corpus, built once and shared by the tests that score it."""
+    return build_corpus(SHIPPED, tmp_path_factory.mktemp("shipped") / "built")
+
+
+def replay(corpus: Corpus) -> Score:
+    return score_corpus(corpus, ModelClient.replaying(DEFAULT_MODEL, SHIPPED / ANSWERS))
+
+
+def test_every_question_the_shipped_corpus_asks_has_a_recorded_answer(
+    shipped: Corpus,
+) -> None:
+    score = replay(shipped)
+
+    # The guard on the published numbers. Edit a prompt, a fixture or the
+    # linker and this fails rather than quietly scoring a smaller corpus.
+    assert score.unrecorded == ()
+    assert score.unfinished == 0
+    assert score.spend == Spend()
+    assert score.true_positives + score.false_negatives == 20
+
+
+def test_scoring_the_shipped_corpus_twice_gives_the_same_numbers(
+    shipped: Corpus,
+) -> None:
+    assert replay(shipped) == replay(shipped)
+
+
+def test_the_shipped_corpus_scores_what_the_readme_publishes(shipped: Corpus) -> None:
+    score = replay(shipped)
+
+    # The README quotes these. Pinning them here is what keeps the two from
+    # drifting apart: change the prompt, the model or the linker and this
+    # fails, which is the moment to re-record and rewrite the paragraph.
+    assert score.true_positives == 10
+    assert score.false_negatives == 10
+    assert score.false_positives == 0
+    assert score.recall == 0.5
+    assert score.precision == 1.0
+
+    reached = [
+        result for result in score.results if result.decoy and result.verified
+    ]
+    assert len(reached) == 4
+    assert all(result.spurious == () for result in reached)
