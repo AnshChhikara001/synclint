@@ -96,6 +96,37 @@ decoy whose commit is not the kind of change the manifest calls it. Anything
 with a fault is not measured at all, so *unreachable* means one thing only —
 drift correctly recorded that synclint cannot yet get to.
 
+## Scoring it
+
+    python -m synclint score corpus
+
+Runs every case and every decoy branch through `analyse` and matches what came
+back against the manifest. The finding a case planted is a true positive; a case
+that produced nothing is a false negative; every other finding is a false
+positive, whether it landed on a decoy branch, where nothing at all should be
+reported, or beside the planted one on a case branch. Precision and recall
+follow, broken down by drift kind, as markdown that goes straight into the
+README.
+
+    answers/          one recorded model answer per question the corpus asks
+
+Scoring replays those and cannot do anything else. The client it runs on has no
+provider behind it and a zero ceiling against a zero price, so a question with
+no recorded answer comes back as a gap rather than as a call — and a run missing
+any answer prints the gaps and no numbers at all. Numbers computed over whichever
+branches happened to be cached would be a different measurement every time and
+would not say so on the page.
+
+Recording is the one pass that costs money, and it is the flag that asks for it:
+
+    OPENAI_API_KEY=... python -m synclint score corpus --record
+
+Answers are keyed on the question, the schema and the model name, so a figure
+recorded against one model cannot be republished as another's, and re-recording
+after a change to the prompt or the fixture asks only for what actually moved.
+The directory is committed: an accuracy figure nobody else can recompute is a
+claim rather than a measurement.
+
 ## What the manifest is not
 
 The manifest is ground truth, written by hand, and deliberately independent of
