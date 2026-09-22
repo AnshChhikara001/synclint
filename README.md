@@ -38,7 +38,7 @@ Not yet built: the repair and validation passes, rules-gated confidence, the
 
 ## Measured so far
 
-69 tests, mypy strict, no API spend — every test replays a recorded answer or
+70 tests, mypy strict, no API spend — every test replays a recorded answer or
 injects a fake. Of the twenty planted cases, **18 reach the model**: their
 expected section and chunk meet as a suspect, which is the ceiling on what a run
 could find before the model is asked anything.
