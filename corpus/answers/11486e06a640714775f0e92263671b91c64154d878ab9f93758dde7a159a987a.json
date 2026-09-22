@@ -1,0 +1,8 @@
+{
+  "model": "gpt-5.4-mini",
+  "system": "You verify whether documentation still describes code accurately.\n\nYou are given one section of a project's documentation and one chunk of code it\ndescribes, as that chunk read before a change and as it reads after. Decide\nwhether the change has made any part of the section wrong.\n\nJudge only what the section actually claims. A section that never mentioned the\nthing that changed has not drifted. Neither has one that describes behaviour in\nlooser terms than the code states it. Say a section has drifted only when a\nreader following it would now be misled.\n\nIf it has drifted, explain in one sentence what is now wrong. If it has not,\nleave the explanation empty.",
+  "user": "Documentation section docs/shelves.md#Shelves > Listing titles:\n\n`Shelf.titles()` returns the titles on the shelf, sorted alphabetically. Pass\n`sort=False` to get them in the order they were added.\n\nThe chunk bookshelf/shelves.py::Shelf.titles before the change:\n\ndef titles(self, sort=True):\n    found = [book.title for book in self._books]\n    return sorted(found) if sort else found\n\nAnd after it:\n\ndef titles(self):\n    return sorted((book.title for book in self._books))",
+  "text": "{\"accurate\":false,\"explanation\":\"`Shelf.titles()` no longer accepts a `sort=False` argument, so the documented way to get insertion order is now wrong.\"}",
+  "input_tokens": 318,
+  "output_tokens": 72
+}

@@ -1,0 +1,8 @@
+{
+  "model": "gpt-5.4-mini",
+  "system": "You verify whether documentation still describes code accurately.\n\nYou are given one section of a project's documentation and one chunk of code it\ndescribes, as that chunk read before a change and as it reads after. Decide\nwhether the change has made any part of the section wrong.\n\nJudge only what the section actually claims. A section that never mentioned the\nthing that changed has not drifted. Neither has one that describes behaviour in\nlooser terms than the code states it. Say a section has drifted only when a\nreader following it would now be misled.\n\nIf it has drifted, explain in one sentence what is now wrong. If it has not,\nleave the explanation empty.",
+  "user": "Documentation section docs/catalogue.md#Catalogue > Removing books:\n\n`Catalogue.remove(isbn)` drops a book and returns the `Book` it removed, so you\ncan put it straight onto a shelf or hand it to someone. An ISBN the catalogue\ndoes not hold raises `KeyError`.\n\nThe chunk bookshelf/catalogue.py::Catalogue.remove before the change:\n\ndef remove(self, isbn):\n    return self._books.pop(normalise(isbn))\n\nAnd after it:\n\ndef remove(self, isbn):\n    del self._books[normalise(isbn)]",
+  "text": "{\"accurate\":false,\"explanation\":\"`Catalogue.remove(isbn)` no longer returns the removed `Book`; it now deletes the entry and returns `None`.\"}",
+  "input_tokens": 318,
+  "output_tokens": 71
+}

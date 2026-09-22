@@ -1,0 +1,8 @@
+{
+  "model": "gpt-5.4-mini",
+  "system": "You verify whether documentation still describes code accurately.\n\nYou are given one section of a project's documentation and one chunk of code it\ndescribes, as that chunk read before a change and as it reads after. Decide\nwhether the change has made any part of the section wrong.\n\nJudge only what the section actually claims. A section that never mentioned the\nthing that changed has not drifted. Neither has one that describes behaviour in\nlooser terms than the code states it. Say a section has drifted only when a\nreader following it would now be misled.\n\nIf it has drifted, explain in one sentence what is now wrong. If it has not,\nleave the explanation empty.",
+  "user": "Documentation section docs/isbn.md#ISBNs > Validating:\n\n`is_valid(isbn)` checks a normalised ISBN against its check digit. Only\nthirteen-digit ISBNs are accepted \u2014 a ten-digit ISBN is always rejected, so\nconvert older ISBNs to thirteen digits before storing them.\n\nThe chunk bookshelf/isbn.py::is_valid before the change:\n\ndef is_valid(isbn):\n    if len(isbn) != 13 or not isbn.isdigit():\n        return False\n    weighted = sum((int(digit) * (1 if position % 2 == 0 else 3) for position, digit in enumerate(isbn[:12])))\n    return (10 - weighted % 10) % 10 == int(isbn[12])\n\nAnd after it:\n\ndef is_valid(isbn):\n    if len(isbn) != 13 or not isbn.isdigit():\n        return False\n    body, check = (isbn[:12], int(isbn[12]))\n    weighted = 0\n    for position, digit in enumerate(body):\n        weighted += int(digit) * _WEIGHTS[position % 2]\n    return (10 - weighted % 10) % 10 == check",
+  "text": "{\"accurate\":true,\"explanation\":\"\"}",
+  "input_tokens": 452,
+  "output_tokens": 51
+}

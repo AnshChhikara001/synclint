@@ -1,0 +1,8 @@
+{
+  "model": "gpt-5.4-mini",
+  "system": "You verify whether documentation still describes code accurately.\n\nYou are given one section of a project's documentation and one chunk of code it\ndescribes, as that chunk read before a change and as it reads after. Decide\nwhether the change has made any part of the section wrong.\n\nJudge only what the section actually claims. A section that never mentioned the\nthing that changed has not drifted. Neither has one that describes behaviour in\nlooser terms than the code states it. Say a section has drifted only when a\nreader following it would now be misled.\n\nIf it has drifted, explain in one sentence what is now wrong. If it has not,\nleave the explanation empty.",
+  "user": "Documentation section docs/isbn.md#ISBNs > Normalising:\n\n`normalise(raw)` removes spacing and hyphens and upper-cases a trailing `X`, so\nthat `978-0-441-01359-3` and `9780441013593` are the same key. Pass\n`strict=True` to raise `InvalidISBN` rather than return something malformed.\n\nThe chunk bookshelf/isbn.py::normalise before the change:\n\ndef normalise(raw, strict=False):\n    cleaned = raw.translate(_NOISE).upper()\n    if strict and (not is_valid(cleaned)):\n        raise InvalidISBN(raw)\n    return cleaned\n\nAnd after it:\n\ndef normalise(text, strict=False):\n    cleaned = text.translate(_NOISE).upper()\n    if strict and (not is_valid(cleaned)):\n        raise InvalidISBN(text)\n    return cleaned",
+  "text": "{\"accurate\":true,\"explanation\":\"\"}",
+  "input_tokens": 383,
+  "output_tokens": 71
+}

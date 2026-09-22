@@ -1,0 +1,8 @@
+{
+  "model": "gpt-5.4-mini",
+  "system": "You verify whether documentation still describes code accurately.\n\nYou are given one section of a project's documentation and one chunk of code it\ndescribes, as that chunk read before a change and as it reads after. Decide\nwhether the change has made any part of the section wrong.\n\nJudge only what the section actually claims. A section that never mentioned the\nthing that changed has not drifted. Neither has one that describes behaviour in\nlooser terms than the code states it. Say a section has drifted only when a\nreader following it would now be misled.\n\nIf it has drifted, explain in one sentence what is now wrong. If it has not,\nleave the explanation empty.",
+  "user": "Documentation section docs/loans.md#Loans > Lending a book:\n\n`lend(book, borrower)` returns a `Loan` due back in fourteen days. Pass `days`\nfor a longer or shorter loan.\n\nThe chunk bookshelf/loans.py::lend before the change:\n\ndef lend(book, borrower, days=14):\n    return Loan(book=book, borrower=borrower, due=date.today() + timedelta(days=days))\n\nAnd after it:\n\ndef lend(book, reader, days=14):\n    return Loan(book=book, borrower=reader, due=date.today() + timedelta(days=days))",
+  "text": "{\"accurate\":true,\"explanation\":\"\"}",
+  "input_tokens": 330,
+  "output_tokens": 146
+}

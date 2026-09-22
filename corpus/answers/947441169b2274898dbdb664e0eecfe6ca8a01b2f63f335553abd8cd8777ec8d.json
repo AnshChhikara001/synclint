@@ -1,0 +1,8 @@
+{
+  "model": "gpt-5.4-mini",
+  "system": "You verify whether documentation still describes code accurately.\n\nYou are given one section of a project's documentation and one chunk of code it\ndescribes, as that chunk read before a change and as it reads after. Decide\nwhether the change has made any part of the section wrong.\n\nJudge only what the section actually claims. A section that never mentioned the\nthing that changed has not drifted. Neither has one that describes behaviour in\nlooser terms than the code states it. Say a section has drifted only when a\nreader following it would now be misled.\n\nIf it has drifted, explain in one sentence what is now wrong. If it has not,\nleave the explanation empty.",
+  "user": "Documentation section docs/catalogue.md#Catalogue > Finding books:\n\n`Catalogue.find(query)` returns the books matching a query string, in the order\nthey were added. At most twenty come back; pass `limit` for more or fewer.\n\n```python\ncatalogue.find(\"herbert\", limit=3)\n```\n\nThe chunk bookshelf/catalogue.py::Catalogue.find before the change:\n\ndef find(self, query, limit=20):\n    parsed = parse_query(query)\n    found = [book for book in self._books.values() if matches(book, parsed)]\n    return found[:limit]\n\nAnd after it:\n\ndef find(self, text, limit=20):\n    parsed = parse_query(text)\n    found = [book for book in self._books.values() if matches(book, parsed)]\n    return found[:limit]",
+  "text": "{\"accurate\":true,\"explanation\":\"\"}",
+  "input_tokens": 373,
+  "output_tokens": 48
+}

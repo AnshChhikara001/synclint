@@ -1,0 +1,8 @@
+{
+  "model": "gpt-5.4-mini",
+  "system": "You verify whether documentation still describes code accurately.\n\nYou are given one section of a project's documentation and one chunk of code it\ndescribes, as that chunk read before a change and as it reads after. Decide\nwhether the change has made any part of the section wrong.\n\nJudge only what the section actually claims. A section that never mentioned the\nthing that changed has not drifted. Neither has one that describes behaviour in\nlooser terms than the code states it. Say a section has drifted only when a\nreader following it would now be misled.\n\nIf it has drifted, explain in one sentence what is now wrong. If it has not,\nleave the explanation empty.",
+  "user": "Documentation section docs/storage.md#Storage > Saving:\n\n`save(catalogue, path)` writes the catalogue to `path`. Whatever file is already\nthere is copied to `path.bak` first; pass `backup=False` to overwrite it\noutright.\n\nThe chunk bookshelf/storage.py::save before the change:\n\ndef save(catalogue, path, backup=True):\n    destination = Path(path)\n    if backup and destination.exists():\n        backup_path = destination.with_suffix(destination.suffix + '.bak')\n        backup_path.write_bytes(destination.read_bytes())\n    payload = [_entry(book) for book in catalogue.find('')]\n    destination.write_text(json.dumps(payload, indent=2))\n\nAnd after it:\n\ndef save(catalogue, path, backup=True):\n    destination = Path(path)\n    if backup:\n        _back_up(destination)\n    payload = [_entry(book) for book in catalogue.find('')]\n    destination.write_text(json.dumps(payload, indent=2))",
+  "text": "{\"accurate\":true,\"explanation\":\"\"}",
+  "input_tokens": 403,
+  "output_tokens": 184
+}

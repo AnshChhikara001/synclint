@@ -1,0 +1,8 @@
+{
+  "model": "gpt-5.4-mini",
+  "system": "You verify whether documentation still describes code accurately.\n\nYou are given one section of a project's documentation and one chunk of code it\ndescribes, as that chunk read before a change and as it reads after. Decide\nwhether the change has made any part of the section wrong.\n\nJudge only what the section actually claims. A section that never mentioned the\nthing that changed has not drifted. Neither has one that describes behaviour in\nlooser terms than the code states it. Say a section has drifted only when a\nreader following it would now be misled.\n\nIf it has drifted, explain in one sentence what is now wrong. If it has not,\nleave the explanation empty.",
+  "user": "Documentation section docs/importing.md#Importing > Reading a CSV:\n\n`read_csv(path)` reads a file with `title`, `author`, `isbn` and `year` columns\nand returns a list of `Book`. Pass `delimiter` for tab-separated files.\n\n```python\nfrom bookshelf.importer import read_csv\n\nbooks = read_csv(\"library.csv\")\n```\n\nThe chunk bookshelf/importer.py::read_csv before the change:\n\ndef read_csv(path, delimiter=',', skip_invalid=True):\n    with open(path, newline='') as handle:\n        return read_rows(csv.DictReader(handle, delimiter=delimiter), skip_invalid)\n\nAnd after it:\n\ndef read_csv(path, delimiter=',', skip_invalid=False):\n    with open(path, newline='') as handle:\n        return read_rows(csv.DictReader(handle, delimiter=delimiter), skip_invalid)",
+  "text": "{\"accurate\":true,\"explanation\":\"\"}",
+  "input_tokens": 379,
+  "output_tokens": 102
+}
