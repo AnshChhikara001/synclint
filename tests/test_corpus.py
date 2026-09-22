@@ -14,9 +14,11 @@ from synclint.corpus import (
     Case,
     Corpus,
     CorpusError,
+    Decoy,
     audit_corpus,
     build_corpus,
     case_ref,
+    decoy_ref,
 )
 from synclint.git import file_at
 from synclint.index import build_index
@@ -53,15 +55,22 @@ def write_corpus(
     base: dict[str, str],
     cases: dict[str, dict[str, str]],
     manifest: list[dict[str, str]],
+    decoys: dict[str, dict[str, str]] | None = None,
+    decoy_manifest: list[dict[str, str]] | None = None,
 ) -> None:
     write(source / "base", base)
     for case_id, overlay in cases.items():
         write(source / "cases" / case_id, overlay)
-    entries = [
-        "[[case]]\n" + "".join(f'{field} = "{value}"\n' for field, value in case)
-        for case in (sorted(entry.items()) for entry in manifest)
-    ]
+    for decoy_id, overlay in (decoys or {}).items():
+        write(source / "decoys" / decoy_id, overlay)
+    entries = [_table("case", entry) for entry in manifest]
+    entries += [_table("decoy", entry) for entry in decoy_manifest or []]
     (source / "manifest.toml").write_text("\n".join(entries))
+
+
+def _table(name: str, entry: dict[str, str]) -> str:
+    fields = "".join(f'{field} = "{value}"\n' for field, value in sorted(entry.items()))
+    return f"[[{name}]]\n{fields}"
 
 
 FIND_QUERY_RENAMED = {
@@ -247,9 +256,11 @@ def test_the_command_line_prints_the_shape_the_reach_and_the_faults() -> None:
     printed = render_audit(
         Audit(
             cases=(Case(**FIND_QUERY_RENAMED), Case(**SHELF_CAPACITY_DEFAULT)),
+            decoys=(),
             faults=("half-written: an overlay with no case in the manifest",),
             reachable=("find-query-renamed",),
             unreachable=("shelf-capacity-default",),
+            suspected=(),
         )
     )
 
@@ -264,14 +275,284 @@ def test_the_command_line_says_so_when_the_corpus_is_sound() -> None:
     printed = render_audit(
         Audit(
             cases=(Case(**FIND_QUERY_RENAMED),),
+            decoys=(),
             faults=(),
             reachable=("find-query-renamed",),
             unreachable=(),
+            suspected=(),
         )
     )
 
     assert "1 of 1 reachable as a suspect." in printed
     assert "No faults." in printed
+    # A corpus with no decoys says nothing about decoys rather than "0 decoys".
+    assert "decoy" not in printed
+
+
+FIND_REFLOWED = """
+    def find(
+        query,
+        limit=20,
+    ):
+        return [query] * limit
+    """
+
+FIND_REFLOWED_DECOY = {
+    "id": "find-reflowed",
+    "kind": "formatting",
+    "description": "find's signature is wrapped across lines",
+}
+
+
+def test_each_decoy_becomes_its_own_branch_off_the_base(tmp_path: Path) -> None:
+    source = tmp_path / "corpus"
+    write_corpus(
+        source,
+        base={"catalogue.py": CATALOGUE, "docs/catalogue.md": DOCS},
+        cases={"find-query-renamed": {"catalogue.py": RENAMED}},
+        manifest=[FIND_QUERY_RENAMED],
+        decoys={"find-reflowed": {"catalogue.py": FIND_REFLOWED}},
+        decoy_manifest=[FIND_REFLOWED_DECOY],
+    )
+
+    corpus = build_corpus(source, tmp_path / "built")
+
+    assert [decoy.id for decoy in corpus.decoys] == ["find-reflowed"]
+    reflowed = file_at(corpus.root, decoy_ref("find-reflowed"), "catalogue.py")
+    assert "def find(\n" in reflowed
+    # Off the base rather than on top of the cases, so that the diff a decoy
+    # is measured on holds nothing but the decoy.
+    assert "def find(text" not in reflowed
+
+
+FIND_REFACTORED = """
+    def find(query, limit=20):
+        found = [query] * limit
+        return found
+    """
+
+FIND_BODY_REFACTORED = {
+    "id": "find-body-refactored",
+    "kind": "internal-refactor",
+    "description": "find names the list it returns",
+}
+
+
+def audit_decoys(
+    tmp_path: Path,
+    decoys: dict[str, dict[str, str]],
+    decoy_manifest: list[dict[str, str]],
+    base: dict[str, str] | None = None,
+) -> Audit:
+    """Build a one-case corpus carrying these decoys, and audit it."""
+    source = tmp_path / "corpus"
+    write_corpus(
+        source,
+        base=base or {"catalogue.py": CATALOGUE, "docs/catalogue.md": DOCS},
+        cases={"find-query-renamed": {"catalogue.py": RENAMED}},
+        manifest=[FIND_QUERY_RENAMED],
+        decoys=decoys,
+        decoy_manifest=decoy_manifest,
+    )
+    return audit_corpus(build_corpus(source, tmp_path / "built"))
+
+
+def test_a_decoy_that_only_reformats_puts_nothing_to_the_model(tmp_path: Path) -> None:
+    audit = audit_decoys(
+        tmp_path,
+        decoys={"find-reflowed": {"catalogue.py": FIND_REFLOWED}},
+        decoy_manifest=[FIND_REFLOWED_DECOY],
+    )
+
+    assert audit.faults == ()
+    assert audit.decoys == (Decoy(**FIND_REFLOWED_DECOY),)
+    # Reformatting does not survive a parse, so there is no changed chunk for a
+    # section to hang off: this decoy cannot produce a finding whatever a model
+    # would have said about it.
+    assert audit.suspected == ()
+
+
+def test_a_refactor_decoy_is_put_to_the_model_like_any_other_change(
+    tmp_path: Path,
+) -> None:
+    audit = audit_decoys(
+        tmp_path,
+        decoys={"find-body-refactored": {"catalogue.py": FIND_REFACTORED}},
+        decoy_manifest=[FIND_BODY_REFACTORED],
+    )
+
+    assert audit.faults == ()
+    # The body really did change, so the section linked to it is a suspect and
+    # only the model's judgement keeps this from being a false positive.
+    assert audit.suspected == ("find-body-refactored",)
+
+
+def test_a_refactor_decoy_that_changes_no_chunk_is_a_fault(tmp_path: Path) -> None:
+    audit = audit_decoys(
+        tmp_path,
+        decoys={"find-body-refactored": {"catalogue.py": FIND_REFLOWED}},
+        decoy_manifest=[FIND_BODY_REFACTORED],
+    )
+
+    # The one thing a decoy must not be is a no-op wearing the label of a real
+    # change: nothing could ever have gone wrong about it, so clearing it is
+    # not evidence of anything.
+    assert audit.faults == (
+        "find-body-refactored: kind internal-refactor promises a changed chunk, "
+        "and this commit changes none",
+    )
+    assert audit.suspected == ()
+
+
+def test_a_formatting_decoy_that_changes_a_chunk_is_a_fault(tmp_path: Path) -> None:
+    audit = audit_decoys(
+        tmp_path,
+        decoys={"find-reflowed": {"catalogue.py": FIND_REFACTORED}},
+        decoy_manifest=[FIND_REFLOWED_DECOY],
+    )
+
+    assert audit.faults == (
+        "find-reflowed: kind formatting promises no changed chunk, "
+        "and this commit changes catalogue.py::find",
+    )
+
+
+def test_a_decoy_that_edits_documentation_is_a_fault(tmp_path: Path) -> None:
+    audit = audit_decoys(
+        tmp_path,
+        decoys={
+            "find-reflowed": {
+                "catalogue.py": FIND_REFLOWED,
+                "docs/catalogue.md": "# Catalogue\n\n## Finding books\n\nCall it.\n",
+            }
+        },
+        decoy_manifest=[FIND_REFLOWED_DECOY],
+    )
+
+    assert audit.faults == (
+        "find-reflowed: edits documentation (docs/catalogue.md); a decoy changes "
+        "code and leaves the prose alone",
+    )
+
+
+CATALOGUE_TESTS = """
+    from catalogue import find
+
+
+    def test_find_returns_one_result_per_place_in_the_limit():
+        assert find("dune") == ["dune"] * 20
+    """
+
+CATALOGUE_TESTS_EXTENDED = """
+    from catalogue import find
+
+
+    def test_find_returns_one_result_per_place_in_the_limit():
+        assert find("dune") == ["dune"] * 20
+
+
+    def test_find_honours_a_limit_it_is_given():
+        assert find("dune", 2) == ["dune", "dune"]
+    """
+
+TESTS_COVER_THE_LIMIT = {
+    "id": "tests-cover-the-limit",
+    "kind": "test-only",
+    "description": "find's limit gains a test",
+}
+
+BASE_WITH_TESTS = {
+    "catalogue.py": CATALOGUE,
+    "docs/catalogue.md": DOCS,
+    "tests/test_catalogue.py": CATALOGUE_TESTS,
+}
+
+
+def test_a_test_only_decoy_puts_nothing_to_the_model(tmp_path: Path) -> None:
+    audit = audit_decoys(
+        tmp_path,
+        base=BASE_WITH_TESTS,
+        decoys={
+            "tests-cover-the-limit": {"tests/test_catalogue.py": CATALOGUE_TESTS_EXTENDED}
+        },
+        decoy_manifest=[TESTS_COVER_THE_LIMIT],
+    )
+
+    assert audit.faults == ()
+    assert audit.suspected == ()
+
+
+def test_a_test_only_decoy_that_touches_source_is_a_fault(tmp_path: Path) -> None:
+    audit = audit_decoys(
+        tmp_path,
+        base=BASE_WITH_TESTS,
+        decoys={
+            "tests-cover-the-limit": {
+                "tests/test_catalogue.py": CATALOGUE_TESTS_EXTENDED,
+                "catalogue.py": FIND_REFLOWED,
+            }
+        },
+        decoy_manifest=[TESTS_COVER_THE_LIMIT],
+    )
+
+    # Reformatting the source alongside would clear the chunk check, and the
+    # decoy would then be measuring something other than what it is called.
+    assert audit.faults == (
+        "tests-cover-the-limit: kind test-only promises a change to test files "
+        "only, and this commit changes catalogue.py",
+    )
+
+
+def test_an_unknown_decoy_kind_and_an_unclaimed_decoy_overlay_are_faults(
+    tmp_path: Path,
+) -> None:
+    audit = audit_decoys(
+        tmp_path,
+        decoys={
+            "find-reflowed": {"catalogue.py": FIND_REFLOWED},
+            "half-written": {"catalogue.py": FIND_REFACTORED},
+        },
+        decoy_manifest=[FIND_REFLOWED_DECOY | {"kind": "whitespace"}],
+    )
+
+    assert audit.faults == (
+        "find-reflowed: kind whitespace is not one of internal-refactor, "
+        "comment-edit, test-only, formatting",
+        "half-written: an overlay with no decoy in the manifest",
+    )
+
+
+def test_the_command_line_prints_the_decoys_and_what_reaches_the_model() -> None:
+    printed = render_audit(
+        Audit(
+            cases=(Case(**FIND_QUERY_RENAMED),),
+            decoys=(Decoy(**FIND_BODY_REFACTORED), Decoy(**FIND_REFLOWED_DECOY)),
+            faults=(),
+            reachable=("find-query-renamed",),
+            unreachable=(),
+            suspected=("find-body-refactored",),
+        )
+    )
+
+    assert "2 decoys: 1 internal-refactor, 1 formatting." in printed
+    assert "1 reaches the model, where a false positive is still possible:" in printed
+    assert "    find-body-refactored" in printed
+
+
+def test_the_command_line_says_when_no_decoy_reaches_the_model() -> None:
+    printed = render_audit(
+        Audit(
+            cases=(Case(**FIND_QUERY_RENAMED),),
+            decoys=(Decoy(**FIND_REFLOWED_DECOY),),
+            faults=(),
+            reachable=("find-query-renamed",),
+            unreachable=(),
+            suspected=(),
+        )
+    )
+
+    assert "1 decoy: 1 formatting." in printed
+    assert "None reaches the model, so none can produce a finding." in printed
 
 
 SHIPPED = Path(__file__).parent.parent / "corpus"

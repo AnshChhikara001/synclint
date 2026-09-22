@@ -1,4 +1,4 @@
-"""The fixture corpus: planted drift, and the ground truth saying what should be found."""
+"""The fixture corpus: planted drift, decoys, and the ground truth over both."""
 
 from __future__ import annotations
 
@@ -10,22 +10,41 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from synclint.analyse import suspects
-from synclint.changes import touched_chunks
+from synclint.changes import is_test_file, touched_chunks
 from synclint.chunks import extract_chunks
 from synclint.git import file_at, run
 from synclint.index import Index, build_index
 
 BASE_REF = "base"
 
-# TODO: #5 adds decoys — changes that must produce no finding — which do not
-# belong here. A decoy asserts the absence of a finding rather than a kind of
-# one, so it gets its own directory and its own manifest table.
 KINDS = (
     "renamed-parameter",
     "changed-default",
     "removed-capability",
     "undocumented-feature",
 )
+
+
+@dataclass(frozen=True)
+class DecoyKind:
+    """What a decoy of one kind promises about its own commit.
+
+    A kind is a claim about the change, and the audit holds the decoy to it. A
+    `formatting` decoy that really changes behaviour, or an `internal-refactor`
+    that really changes nothing, is mislabelled — and a false positive rate
+    measured over either would mean nothing.
+    """
+
+    changes_chunks: bool
+    test_files_only: bool = False
+
+
+DECOY_KINDS = {
+    "internal-refactor": DecoyKind(changes_chunks=True),
+    "comment-edit": DecoyKind(changes_chunks=False),
+    "test-only": DecoyKind(changes_chunks=False, test_files_only=True),
+    "formatting": DecoyKind(changes_chunks=False),
+}
 
 
 class CorpusError(Exception):
@@ -48,12 +67,35 @@ class Case:
 
 
 @dataclass(frozen=True)
+class Decoy:
+    """One change to the fixture that must produce no finding.
+
+    A decoy carries no section and no chunk because there is nothing to expect:
+    what it asserts is an absence. Its kind says what sort of change it is, and
+    the audit holds it to that.
+    """
+
+    id: str
+    kind: str
+    description: str
+
+
+@dataclass(frozen=True)
+class Manifest:
+    """The ground truth as written down: what should be found, and what should not."""
+
+    cases: tuple[Case, ...]
+    decoys: tuple[Decoy, ...]
+
+
+@dataclass(frozen=True)
 class Corpus:
     """A built corpus: where it was written down, where it was built, and its cases."""
 
     source: Path
     root: Path
     cases: tuple[Case, ...]
+    decoys: tuple[Decoy, ...]
 
 
 @dataclass(frozen=True)
@@ -67,14 +109,20 @@ class Audit:
     A case with a fault appears in neither, so unreachable means one thing only
     — drift correctly recorded that synclint cannot yet get to.
 
-    The cases are carried along so that a report can be rendered from this
-    alone, the way `analyse.Report` carries what `render` needs.
+    `suspected` names the decoys that reach the model, where a false positive
+    is still possible. A decoy missing from it raised no suspect at all and so
+    cannot produce a finding whatever a model would have said about it.
+
+    The cases and decoys are carried along so that a report can be rendered from
+    this alone, the way `analyse.Report` carries what `render` needs.
     """
 
     cases: tuple[Case, ...]
+    decoys: tuple[Decoy, ...]
     faults: tuple[str, ...]
     reachable: tuple[str, ...]
     unreachable: tuple[str, ...]
+    suspected: tuple[str, ...]
 
 
 def case_ref(case_id: str) -> str:
@@ -82,39 +130,78 @@ def case_ref(case_id: str) -> str:
     return f"case/{case_id}"
 
 
+def decoy_ref(decoy_id: str) -> str:
+    """The branch holding one decoy's commit."""
+    return f"decoy/{decoy_id}"
+
+
 def build_corpus(source: Path, destination: Path) -> Corpus:
     """Materialise the corpus described by `source` as a git repository at `destination`.
 
-    `source` holds `manifest.toml`, a `base/` tree, and a `cases/<id>/` overlay
-    per case naming the files that case rewrites. The build commits `base`, then
-    commits each overlay on top of it as its own branch, so every case is a diff
-    against the same base and one index serves them all.
+    `source` holds `manifest.toml`, a `base/` tree, and an overlay per entry —
+    `cases/<id>/` or `decoys/<id>/` — naming the files it rewrites. The build
+    commits `base`, then commits each overlay on top of it as its own branch, so
+    every case and every decoy is a diff against the same base, one index serves
+    them all, and a decoy carries nothing of the cases.
 
     The working tree is left at `base`. `destination` must not already exist.
     """
-    cases = read_manifest(source / "manifest.toml")
+    manifest = read_manifest(source / "manifest.toml")
     if destination.exists():
         raise CorpusError(f"{destination} already exists")
 
-    shutil.copytree(source / "base", destination)
+    _copy(source / "base", destination)
     _git(destination, "init", "-q", "-b", BASE_REF)
     _commit(destination, "the project as it stands")
 
-    for case in cases:
-        overlay = source / "cases" / case.id
-        if not overlay.is_dir():
-            raise CorpusError(f"case {case.id} has no overlay at {overlay}")
-        _git(destination, "checkout", "-q", "-B", case_ref(case.id), BASE_REF)
-        shutil.copytree(overlay, destination, dirs_exist_ok=True)
-        _git(destination, "add", "-A")
-        if _git(destination, "diff", "--cached", "--name-only").strip() == "":
-            # A case that changes nothing would still commit cleanly on a
-            # `--allow-empty`, and then silently measure nothing for ever.
-            raise CorpusError(f"case {case.id} changes nothing against the base")
-        _commit(destination, case.description)
+    for case in manifest.cases:
+        _commit_overlay(
+            source / "cases" / case.id,
+            destination,
+            case_ref(case.id),
+            case.description,
+            f"case {case.id}",
+        )
+    for decoy in manifest.decoys:
+        _commit_overlay(
+            source / "decoys" / decoy.id,
+            destination,
+            decoy_ref(decoy.id),
+            decoy.description,
+            f"decoy {decoy.id}",
+        )
 
     _git(destination, "checkout", "-q", BASE_REF)
-    return Corpus(source=source, root=destination, cases=cases)
+    return Corpus(
+        source=source, root=destination, cases=manifest.cases, decoys=manifest.decoys
+    )
+
+
+def _commit_overlay(
+    overlay: Path, destination: Path, ref: str, message: str, subject: str
+) -> None:
+    if not overlay.is_dir():
+        raise CorpusError(f"{subject} has no overlay at {overlay}")
+    _git(destination, "checkout", "-q", "-B", ref, BASE_REF)
+    _copy(overlay, destination, dirs_exist_ok=True)
+    _git(destination, "add", "-A")
+    if _git(destination, "diff", "--cached", "--name-only").strip() == "":
+        # An overlay that changes nothing would still commit cleanly on a
+        # `--allow-empty`, and then silently measure nothing for ever.
+        raise CorpusError(f"{subject} changes nothing against the base")
+    _commit(destination, message)
+
+
+def _copy(source: Path, destination: Path, dirs_exist_ok: bool = False) -> None:
+    # Bytecode is left behind by anyone who imports the fixture and is not part
+    # of it. Copying it would commit whatever happens to be on the developer's
+    # disk, and a decoy is audited on the paths its commit touches.
+    shutil.copytree(
+        source,
+        destination,
+        ignore=shutil.ignore_patterns("__pycache__"),
+        dirs_exist_ok=dirs_exist_ok,
+    )
 
 
 def audit_corpus(corpus: Corpus) -> Audit:
@@ -136,13 +223,71 @@ def audit_corpus(corpus: Corpus) -> Audit:
         }
         reached = reachable if (case.section, case.chunk) in pairs else unreachable
         reached.append(case.id)
+
+    suspected: list[str] = []
+    for decoy in corpus.decoys:
+        found = _decoy_faults(corpus, decoy)
+        if found:
+            faults.extend(found)
+            continue
+        if suspects(corpus.root, index, BASE_REF, decoy_ref(decoy.id)):
+            suspected.append(decoy.id)
+
     faults.extend(_unclaimed(corpus))
     return Audit(
         cases=corpus.cases,
+        decoys=corpus.decoys,
         faults=tuple(faults),
         reachable=tuple(reachable),
         unreachable=tuple(unreachable),
+        suspected=tuple(suspected),
     )
+
+
+def _decoy_faults(corpus: Corpus, decoy: Decoy) -> list[str]:
+    """Whether the decoy's commit is the kind of change the manifest calls it."""
+    if decoy.kind not in DECOY_KINDS:
+        return [
+            f"{decoy.id}: kind {decoy.kind} is not one of {', '.join(DECOY_KINDS)}"
+        ]
+    promise = DECOY_KINDS[decoy.kind]
+    ref = decoy_ref(decoy.id)
+    paths = _changed_paths(corpus.root, ref)
+    touched = sorted(
+        change.chunk for change in touched_chunks(corpus.root, BASE_REF, ref)
+    )
+    faults = []
+    if promise.changes_chunks and not touched:
+        faults.append(
+            f"{decoy.id}: kind {decoy.kind} promises a changed chunk, "
+            "and this commit changes none"
+        )
+    if not promise.changes_chunks and touched:
+        faults.append(
+            f"{decoy.id}: kind {decoy.kind} promises no changed chunk, "
+            f"and this commit changes {', '.join(touched)}"
+        )
+    # `changed_chunks` drops test files whole, so a test-only decoy would clear
+    # the chunk check even if it rewrote half the library alongside. What makes
+    # it test-only is where it lands, and that is worth saying separately.
+    if promise.test_files_only:
+        source = [path for path in paths if not is_test_file(path)]
+        if source:
+            faults.append(
+                f"{decoy.id}: kind {decoy.kind} promises a change to test files "
+                f"only, and this commit changes {', '.join(source)}"
+            )
+    # A decoy that updated the prose alongside the code would be the most
+    # realistic one of all, and it cannot be measured here: the index is built
+    # at the base, so the section put to the model would be the stale one and
+    # the false positive would be the harness's rather than the model's.
+    documentation = [path for path in paths if path.endswith(".md")]
+    if documentation:
+        faults.append(
+            f"{decoy.id}: edits documentation ({', '.join(documentation)}); "
+            "a decoy changes code and leaves the prose alone"
+        )
+    return faults
 
 
 def _faults(corpus: Corpus, case: Case, index: Index) -> list[str]:
@@ -150,7 +295,9 @@ def _faults(corpus: Corpus, case: Case, index: Index) -> list[str]:
     # case that adds a doc file is making the same mistake as one that edits
     # an indexed one, and the glob would not have caught it.
     documentation = [
-        path for path in _changed_paths(corpus.root, case) if path.endswith(".md")
+        path
+        for path in _changed_paths(corpus.root, case_ref(case.id))
+        if path.endswith(".md")
     ]
     faults = []
     if case.kind not in KINDS:
@@ -190,10 +337,19 @@ def _chunk_faults(root: Path, case: Case) -> list[str]:
 
 
 def _unclaimed(corpus: Corpus) -> list[str]:
-    claimed = {case.id for case in corpus.cases}
+    return _unclaimed_in(
+        corpus.source / "cases", {case.id for case in corpus.cases}, "case"
+    ) + _unclaimed_in(
+        corpus.source / "decoys", {decoy.id for decoy in corpus.decoys}, "decoy"
+    )
+
+
+def _unclaimed_in(directory: Path, claimed: set[str], noun: str) -> list[str]:
+    if not directory.is_dir():
+        return []
     return [
-        f"{overlay.name}: an overlay with no case in the manifest"
-        for overlay in sorted((corpus.source / "cases").iterdir())
+        f"{overlay.name}: an overlay with no {noun} in the manifest"
+        for overlay in sorted(directory.iterdir())
         if overlay.is_dir() and overlay.name not in claimed
     ]
 
@@ -209,15 +365,18 @@ def _defines(root: Path, revision: str, chunk: str) -> bool:
     return any(defined.id == chunk for defined in chunks)
 
 
-def _changed_paths(root: Path, case: Case) -> list[str]:
-    listing = _git(root, "diff", "--name-only", BASE_REF, case_ref(case.id))
+def _changed_paths(root: Path, ref: str) -> list[str]:
+    listing = _git(root, "diff", "--name-only", BASE_REF, ref)
     return [line for line in listing.splitlines() if line]
 
 
-def read_manifest(path: Path) -> tuple[Case, ...]:
-    """Read the ground truth, in the order the cases are written down."""
+def read_manifest(path: Path) -> Manifest:
+    """Read the ground truth, in the order the cases and decoys are written down."""
     document = tomllib.loads(path.read_text(encoding="utf-8"))
-    return tuple(_case(entry) for entry in document.get("case", []))
+    return Manifest(
+        cases=tuple(_case(entry) for entry in document.get("case", [])),
+        decoys=tuple(_decoy(entry) for entry in document.get("decoy", [])),
+    )
 
 
 def _case(entry: dict[str, object]) -> Case:
@@ -229,6 +388,17 @@ def _case(entry: dict[str, object]) -> Case:
         kind=str(entry["kind"]),
         section=str(entry["section"]),
         chunk=str(entry["chunk"]),
+        description=str(entry["description"]),
+    )
+
+
+def _decoy(entry: dict[str, object]) -> Decoy:
+    missing = sorted({"id", "kind", "description"} - set(entry))
+    if missing:
+        raise CorpusError(f"decoy {entry.get('id', '?')} is missing {', '.join(missing)}")
+    return Decoy(
+        id=str(entry["id"]),
+        kind=str(entry["kind"]),
         description=str(entry["description"]),
     )
 

@@ -6,10 +6,18 @@ import argparse
 import sys
 import tempfile
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 
 from synclint.analyse import Report, analyse
-from synclint.corpus import KINDS, Audit, Corpus, audit_corpus, build_corpus
+from synclint.corpus import (
+    DECOY_KINDS,
+    KINDS,
+    Audit,
+    Corpus,
+    audit_corpus,
+    build_corpus,
+)
 from synclint.index import DEFAULT_DOCUMENTATION_GLOBS, Index, build_index
 from synclint.model import DEFAULT_MODEL, PRICES, ModelClient, OpenAIModel
 
@@ -188,15 +196,23 @@ def render(report: Report) -> str:
 
 def render_audit(audit: Audit) -> str:
     """Render an audited corpus for a terminal."""
-    counts = Counter(case.kind for case in audit.cases)
-    # An unrecognised kind is a fault rather than a reason for this line to
-    # disagree with the case count, so it is counted where it falls.
-    kinds = list(KINDS) + [kind for kind in counts if kind not in KINDS]
-    shape = ", ".join(f"{counts[kind]} {kind}" for kind in kinds if counts[kind])
+    lines = _case_lines(audit) + [""]
+    if audit.decoys:
+        lines += _decoy_lines(audit) + [""]
+    if audit.faults:
+        lines.append(f"{len(audit.faults)} fault{_plural(len(audit.faults))}:")
+        lines += [f"    {fault}" for fault in audit.faults]
+    else:
+        lines.append("No faults.")
+    return "\n".join(lines) + "\n"
+
+
+def _case_lines(audit: Audit) -> list[str]:
     reached = len(audit.reachable)
     total = reached + len(audit.unreachable)
     lines = [
-        f"{len(audit.cases)} case{_plural(len(audit.cases))}: {shape}.",
+        f"{len(audit.cases)} case{_plural(len(audit.cases))}: "
+        f"{_shape(case.kind for case in audit.cases)}.",
         f"{reached} of {total} reachable as "
         f"{'a suspect' if reached == 1 else 'suspects'}",
     ]
@@ -205,13 +221,36 @@ def render_audit(audit: Audit) -> str:
         lines += [f"    {case}" for case in audit.unreachable]
     else:
         lines[-1] += "."
-    lines.append("")
-    if audit.faults:
-        lines.append(f"{len(audit.faults)} fault{_plural(len(audit.faults))}:")
-        lines += [f"    {fault}" for fault in audit.faults]
+    return lines
+
+
+def _decoy_lines(audit: Audit) -> list[str]:
+    # No ratio: a decoy with a fault is not measured, so "4 of 10" would be
+    # counting decoys the audit never put a question to.
+    lines = [
+        f"{len(audit.decoys)} decoy{_plural(len(audit.decoys))}: "
+        f"{_shape((decoy.kind for decoy in audit.decoys), order=DECOY_KINDS)}.",
+    ]
+    if audit.suspected:
+        reaching = len(audit.suspected)
+        lines.append(
+            f"{reaching} {'reaches' if reaching == 1 else 'reach'} the model, "
+            "where a false positive is still possible:"
+        )
+        lines += [f"    {decoy}" for decoy in audit.suspected]
     else:
-        lines.append("No faults.")
-    return "\n".join(lines) + "\n"
+        lines.append("None reaches the model, so none can produce a finding.")
+    return lines
+
+
+def _shape(kinds: Iterable[str], order: Iterable[str] = KINDS) -> str:
+    """How many of each kind there are, in the order the kinds are declared."""
+    counts = Counter(kinds)
+    # An unrecognised kind is a fault rather than a reason for this line to
+    # disagree with the count beside it, so it is counted where it falls.
+    declared = list(order)
+    ordered = declared + [kind for kind in counts if kind not in declared]
+    return ", ".join(f"{counts[kind]} {kind}" for kind in ordered if counts[kind])
 
 
 def _plural(count: int) -> str:
