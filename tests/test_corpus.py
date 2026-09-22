@@ -117,6 +117,19 @@ def test_a_case_that_changes_nothing_is_refused(tmp_path: Path) -> None:
         build_corpus(source, tmp_path / "built")
 
 
+def test_a_manifest_entry_missing_a_field_is_refused(tmp_path: Path) -> None:
+    source = tmp_path / "corpus"
+    write_corpus(
+        source,
+        base={"catalogue.py": CATALOGUE, "docs/catalogue.md": DOCS},
+        cases={"find-query-renamed": {"catalogue.py": RENAMED}},
+        manifest=[{f: v for f, v in FIND_QUERY_RENAMED.items() if f != "chunk"}],
+    )
+
+    with pytest.raises(CorpusError, match="find-query-renamed is missing chunk"):
+        build_corpus(source, tmp_path / "built")
+
+
 def test_a_case_whose_section_names_its_changed_chunk_is_reachable(
     tmp_path: Path,
 ) -> None:

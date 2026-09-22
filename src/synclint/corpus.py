@@ -90,7 +90,7 @@ class Manifest:
 
 @dataclass(frozen=True)
 class Corpus:
-    """A built corpus: where it was written down, where it was built, and its cases."""
+    """A built corpus: where it was written down, where it was built, and what is in it."""
 
     source: Path
     root: Path
@@ -245,7 +245,13 @@ def audit_corpus(corpus: Corpus) -> Audit:
 
 
 def _decoy_faults(corpus: Corpus, decoy: Decoy) -> list[str]:
-    """Whether the decoy's commit is the kind of change the manifest calls it."""
+    """The ways the decoy's commit is not the kind of change the manifest calls it.
+
+    Only as far as a chunk goes, which is as far as synclint itself looks: a
+    decoy that rewrote a module-level statement, or a refactor that quietly
+    changed what the code does, would clear every check here. Those rest on the
+    fixture's own tests and on reading the diff.
+    """
     if decoy.kind not in DECOY_KINDS:
         return [
             f"{decoy.id}: kind {decoy.kind} is not one of {', '.join(DECOY_KINDS)}"
@@ -281,6 +287,8 @@ def _decoy_faults(corpus: Corpus, decoy: Decoy) -> list[str]:
     # realistic one of all, and it cannot be measured here: the index is built
     # at the base, so the section put to the model would be the stale one and
     # the false positive would be the harness's rather than the model's.
+    # TODO: #11 settles which revision the index is built at. A decoy that edits
+    # documentation can become a measurement rather than a fault once it has.
     documentation = [path for path in paths if path.endswith(".md")]
     if documentation:
         faults.append(
@@ -380,9 +388,7 @@ def read_manifest(path: Path) -> Manifest:
 
 
 def _case(entry: dict[str, object]) -> Case:
-    missing = sorted({"id", "kind", "section", "chunk", "description"} - set(entry))
-    if missing:
-        raise CorpusError(f"case {entry.get('id', '?')} is missing {', '.join(missing)}")
+    _require(entry, {"id", "kind", "section", "chunk", "description"}, "case")
     return Case(
         id=str(entry["id"]),
         kind=str(entry["kind"]),
@@ -393,14 +399,20 @@ def _case(entry: dict[str, object]) -> Case:
 
 
 def _decoy(entry: dict[str, object]) -> Decoy:
-    missing = sorted({"id", "kind", "description"} - set(entry))
-    if missing:
-        raise CorpusError(f"decoy {entry.get('id', '?')} is missing {', '.join(missing)}")
+    _require(entry, {"id", "kind", "description"}, "decoy")
     return Decoy(
         id=str(entry["id"]),
         kind=str(entry["kind"]),
         description=str(entry["description"]),
     )
+
+
+def _require(entry: dict[str, object], fields: set[str], noun: str) -> None:
+    missing = sorted(fields - set(entry))
+    if missing:
+        raise CorpusError(
+            f"{noun} {entry.get('id', '?')} is missing {', '.join(missing)}"
+        )
 
 
 def _commit(root: Path, message: str) -> None:

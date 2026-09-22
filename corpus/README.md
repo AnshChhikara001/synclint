@@ -56,11 +56,17 @@ a parse, docstrings are stripped before the comparison (ADR-0004), and test
 files are dropped whole. Six decoys measure the design, then, and four measure
 the judgement — and the four are where a precision figure is actually earned.
 
-A kind is a claim about the change and the audit holds the decoy to it. An
-`internal-refactor` that changes no chunk is a no-op wearing a label; a
-`formatting` decoy that changes one is mislabelled; a `test-only` decoy that
-edits the library is neither. Any of the three would make a rate measured over
-it mean nothing, so each is a fault.
+A kind is a claim about the change, and the audit holds the decoy to as much of
+it as it can see. An `internal-refactor` that changes no chunk is a no-op
+wearing a label; a `formatting` decoy that changes one is mislabelled; a
+`test-only` decoy that edits the library is neither. Any of the three would make
+a rate measured over it mean nothing, so each is a fault.
+
+What the audit cannot see is the rest of the claim. A chunk is a function or a
+class, so a decoy that rewrote a module-level statement would clear every check;
+and nothing here proves a refactor preserved behaviour, only that it changed
+something. Those rest on the fixture's own tests, which pass on every decoy
+branch — though they do not cover every module — and on reading the diff.
 
 ### What the decoys do not cover
 
