@@ -53,7 +53,7 @@ A finding surfaced for human review instead of repaired, because confidence was 
 _Avoid_: warning, alert, notice
 
 **Corpus**:
-The fixture repository every published accuracy number is measured against: a small library, its documentation, and the planted cases committed against it.
+The fixture repository every published accuracy number is measured against: a small library, its documentation, and the planted cases and decoys committed against it.
 _Avoid_: dataset, benchmark, suite, sample
 
 **Case**:
@@ -61,7 +61,7 @@ One planted change to the corpus, together with the section and the chunk it is 
 _Avoid_: example, scenario, instance
 
 **Reach**:
-Whether a case's expected section and chunk meet as a suspect at all. The ceiling on what a run could possibly find before the model is asked anything, and the half of recall that costs nothing to measure.
+Whether a case's expected section and chunk meet as a suspect at all. The ceiling on what a run could possibly find before the model is asked anything, and the half of recall that costs nothing to measure. A decoy has no expected pair, so its reach is whether it raises a suspect at all — the ceiling on the false positives it could cause.
 _Avoid_: coverage, detectable, hit
 
 **Decoy**:

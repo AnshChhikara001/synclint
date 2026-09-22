@@ -29,23 +29,28 @@ access to GitHub, so every judgement the tool makes is reachable offline.
   so silence about a section means it was never in question.
 - **Spend control** — every model response cached on disk by prompt, a ledger of
   tokens and dollars, and a ceiling checked before each call rather than after.
-- **Fixture corpus** — `corpus/` holds a small library with documentation and
-  twenty deliberately planted drift cases, with ground truth for each. See its
-  own README.
+- **Fixture corpus** — `corpus/` holds a small library with documentation,
+  twenty deliberately planted drift cases and ten decoys that must produce
+  nothing, with ground truth for each. See its own README.
 
 Not yet built: the repair and validation passes, rules-gated confidence, the
 `publish` step, and the Action itself.
 
 ## Measured so far
 
-55 tests, mypy strict, no API spend — every test replays a recorded answer or
+69 tests, mypy strict, no API spend — every test replays a recorded answer or
 injects a fake. Of the twenty planted cases, **18 reach the model**: their
 expected section and chunk meet as a suspect, which is the ceiling on what a run
 could find before the model is asked anything.
 
-There are no accuracy numbers yet. Precision and recall need the decoy cases and
-the harness that scores them, and this README will carry those figures rather
-than an estimate of them.
+Of the ten decoys, **6 cannot produce a finding at all** — comments, formatting
+and test-only changes do not survive a parse — and the remaining four internal
+refactors reach the model, where only its judgement stands between them and a
+false positive.
+
+There are no accuracy numbers yet. Precision and recall need the harness that
+scores the corpus, and this README will carry those figures rather than an
+estimate of them.
 
 ## Limitations
 
