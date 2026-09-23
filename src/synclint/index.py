@@ -8,10 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from synclint.chunks import Chunk, extract_chunks
-from synclint.links import Link, propose_name_links
+from synclint.embeddings import EmbeddingClient
+from synclint.links import Link, propose_embedding_links, propose_name_links
 from synclint.sections import Section, split_sections
 
 DEFAULT_DOCUMENTATION_GLOBS = ("README.md", "docs/**/*.md")
+
+# TODO: placeholder until the corpus has been embedded and measured.
+DEFAULT_SIMILARITY_THRESHOLD = 0.5
 
 
 @dataclass(frozen=True)
@@ -50,12 +54,18 @@ class Index:
 def build_index(
     root: Path,
     documentation_globs: Sequence[str] = DEFAULT_DOCUMENTATION_GLOBS,
+    embeddings: EmbeddingClient | None = None,
+    threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
 ) -> Index:
     """Index the repository rooted at `root`.
 
     `documentation_globs` are patterns, relative to `root`, naming the markdown
     that counts as documentation. Python is found by walking the tree, so only
     the documentation side is configurable.
+
+    Links are proposed by name always, and by embedding similarity as well when
+    `embeddings` is given, at `threshold` cosine similarity or above. A pair
+    both propose is linked once under each mechanism.
     """
     chunks: list[Chunk] = []
     for path in _source(root):
@@ -72,11 +82,10 @@ def build_index(
         markdown = path.read_text(encoding="utf-8", errors="replace")
         sections.extend(split_sections(markdown, _relative(path, root)))
 
-    return Index(
-        chunks=tuple(chunks),
-        sections=tuple(sections),
-        links=tuple(propose_name_links(sections, chunks)),
-    )
+    links = propose_name_links(sections, chunks)
+    if embeddings is not None:
+        links += propose_embedding_links(sections, chunks, embeddings, threshold)
+    return Index(chunks=tuple(chunks), sections=tuple(sections), links=tuple(links))
 
 
 def _source(root: Path) -> list[Path]:

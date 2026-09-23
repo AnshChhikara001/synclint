@@ -135,11 +135,15 @@ def suspects(root: Path, index: Index, base: str, head: str) -> list[Suspect]:
     judges them correctly, which does.
     """
     sections = {section.id: section for section in index.sections}
+    # A pair both mechanisms proposed is linked twice, once under each, and is
+    # still one question: the mechanism says how the pair was found, not what
+    # the model is asked about it.
+    linked = dict.fromkeys((link.section, link.chunk) for link in index.links)
     return [
-        Suspect(section=sections[link.section], change=change)
+        Suspect(section=sections[section], change=change)
         for change in touched_chunks(root, base, head)
-        for link in index.links
-        if link.chunk == change.chunk and link.section in sections
+        for section, chunk in linked
+        if chunk == change.chunk and section in sections
     ]
 
 

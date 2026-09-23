@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from textwrap import dedent
 
+from synclint.embeddings import Embedded, EmbeddingClient
 from synclint.index import Index, build_index
 
 
@@ -156,6 +157,111 @@ def test_links_a_section_to_a_chunk_it_names(tmp_path: Path) -> None:
     assert [(link.section, link.chunk, link.mechanism) for link in index.links] == [
         ("README.md#Usage", "src/indexing.py::build_index", "name"),
     ]
+
+
+class TopicEmbedder:
+    """Places a text on one axis per topic word it contains.
+
+    Two texts sharing a topic point the same way, and two that share none are
+    orthogonal, so a test can say exactly which pairs are similar without
+    knowing anything about a real embedding model.
+    """
+
+    name = "topic-embedder"
+    TOPICS = ("capacity", "retry", "greeting")
+
+    def embed(self, text: str) -> Embedded:
+        words = text.lower()
+        # The constant last axis keeps a text with no topic off the zero vector,
+        # which has no direction to compare.
+        vector = [float(topic in words) for topic in self.TOPICS] + [0.1]
+        return Embedded(vector=vector, tokens=1)
+
+
+def embeddings() -> EmbeddingClient:
+    return EmbeddingClient(TopicEmbedder(), price=0.02)
+
+
+SHELF = '''
+    class Shelf:
+        """Somewhere to put books."""
+
+        def __init__(self, capacity=50):
+            """Hold at most `capacity` books."""
+    '''
+
+SHELF_DOCS = """
+    # Shelves
+
+    A new shelf takes fifty books unless you give it a larger capacity.
+    """
+
+
+def test_links_a_section_to_a_chunk_it_never_names_when_they_embed_alike(
+    tmp_path: Path,
+) -> None:
+    write(tmp_path, "shelves.py", SHELF)
+    write(tmp_path, "README.md", SHELF_DOCS)
+
+    index = build_index(tmp_path, embeddings=embeddings(), threshold=0.9)
+
+    # The prose never says `__init__`, so name matching cannot make this link,
+    # and the class it does not name either is left alone: nothing in its
+    # signature or docstring is about capacity.
+    assert [(link.section, link.chunk, link.mechanism) for link in index.links] == [
+        ("README.md#Shelves", "shelves.py::Shelf.__init__", "embedding"),
+    ]
+
+
+def test_the_similarity_threshold_is_configurable(tmp_path: Path) -> None:
+    write(tmp_path, "shelves.py", SHELF)
+    write(tmp_path, "README.md", SHELF_DOCS)
+
+    # The section and `Shelf` share no topic, but the constant axis still gives
+    # them a small positive similarity: about 0.0995.
+    permissive = build_index(tmp_path, embeddings=embeddings(), threshold=0.05)
+    strict = build_index(tmp_path, embeddings=embeddings(), threshold=0.5)
+
+    assert {link.chunk for link in permissive.links} == {
+        "shelves.py::Shelf",
+        "shelves.py::Shelf.__init__",
+    }
+    assert {link.chunk for link in strict.links} == {"shelves.py::Shelf.__init__"}
+
+
+def test_a_pair_both_mechanisms_propose_is_recorded_under_each(tmp_path: Path) -> None:
+    write(tmp_path, "shelves.py", SHELF)
+    write(
+        tmp_path,
+        "README.md",
+        """
+        # Shelves
+
+        `Shelf.__init__` takes a capacity.
+        """,
+    )
+
+    index = build_index(tmp_path, embeddings=embeddings(), threshold=0.9)
+
+    # Kept twice rather than merged, so that each mechanism's share of recall
+    # can be measured on its own. `analyse` asks about the pair once.
+    assert sorted(
+        (link.chunk, link.mechanism)
+        for link in index.links
+        if link.chunk == "shelves.py::Shelf.__init__"
+    ) == [
+        ("shelves.py::Shelf.__init__", "embedding"),
+        ("shelves.py::Shelf.__init__", "name"),
+    ]
+
+
+def test_without_embeddings_every_link_is_a_name_link(tmp_path: Path) -> None:
+    write(tmp_path, "shelves.py", SHELF)
+    write(tmp_path, "README.md", SHELF_DOCS)
+
+    index = build_index(tmp_path)
+
+    assert index.links == ()
 
 
 def write_documentation_tree(root: Path) -> None:

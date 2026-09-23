@@ -1,5 +1,6 @@
 import json
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 from textwrap import dedent
 
@@ -390,4 +391,22 @@ def test_suspects_pair_each_changed_chunk_with_the_sections_linked_to_it(
     assert [(suspect.section.id, suspect.change.chunk) for suspect in found] == [
         ("README.md#Fetching", "src/http.py::fetch"),
         ("README.md#Fetching > Waiting", "src/http.py::fetch"),
+    ]
+
+
+def test_a_pair_linked_by_both_mechanisms_is_one_suspect(tmp_path: Path) -> None:
+    start(tmp_path, {"src/http.py": BASE_SOURCE, "README.md": FETCHING_DOCS})
+    named = build_index(tmp_path)
+    # What an index built with embeddings holds when both mechanisms agree.
+    index = replace(
+        named,
+        links=named.links
+        + tuple(replace(link, mechanism="embedding") for link in named.links),
+    )
+    commit(tmp_path, {"src/http.py": DRIFTED_SOURCE}, "raise the retry limit")
+
+    found = suspects(tmp_path, index, "main~1", "main")
+
+    assert [(suspect.section.id, suspect.change.chunk) for suspect in found] == [
+        ("README.md#Fetching", "src/http.py::fetch"),
     ]
