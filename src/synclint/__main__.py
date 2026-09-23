@@ -235,11 +235,11 @@ def _score(arguments: argparse.Namespace) -> None:
         if arguments.record
         else ModelClient.replaying(arguments.model, answers)
     )
-    embedded = arguments.source / EMBEDDINGS
+    vectors = arguments.source / EMBEDDINGS
     embeddings = (
-        _embedding_client(embedded)
+        _embedding_client(vectors)
         if arguments.record
-        else EmbeddingClient.replaying(DEFAULT_EMBEDDING_MODEL, embedded)
+        else EmbeddingClient.replaying(DEFAULT_EMBEDDING_MODEL, vectors)
     )
     with tempfile.TemporaryDirectory() as directory:
         corpus = build_corpus(arguments.source, Path(directory) / "built")
@@ -265,7 +265,8 @@ def _score(arguments: argparse.Namespace) -> None:
 
 
 _UNEMBEDDED = (
-    "The corpus has no recorded embeddings, so there is no link recall. "
+    "Not every section and chunk has a recorded embedding, so there is no link "
+    "recall. "
     "Record them with --record, then score again.\n"
 )
 
@@ -441,9 +442,8 @@ def render_links(measured: LinkRecall) -> str:
 
 
 def _linking_row(label: str, linking: Linking) -> str:
-    planted = len(linking.linked) + len(linking.unlinked)
     return (
-        f"| {label} | {linking.pairs} | {len(linking.linked)} of {planted} | "
+        f"| {label} | {linking.pairs} | {len(linking.linked)} of {linking.planted} | "
         f"{_rate(linking.recall)} | {linking.case_suspects} | {linking.decoy_suspects} |"
     )
 

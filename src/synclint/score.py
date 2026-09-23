@@ -95,10 +95,13 @@ class Linking:
     decoy_suspects: int
 
     @property
+    def planted(self) -> int:
+        return len(self.linked) + len(self.unlinked)
+
+    @property
     def recall(self) -> float | None:
         """How many planted pairs the index links, or `None` over no cases."""
-        planted = len(self.linked) + len(self.unlinked)
-        return len(self.linked) / planted if planted else None
+        return len(self.linked) / self.planted if self.planted else None
 
 
 @dataclass(frozen=True)
@@ -148,12 +151,14 @@ def _only(index: Index, mechanism: str) -> Index:
 
 def _linking(corpus: Corpus, index: Index) -> Linking:
     pairs = {(link.section, link.chunk) for link in index.links}
+    linked: list[str] = []
+    unlinked: list[str] = []
+    for case in corpus.cases:
+        (linked if (case.section, case.chunk) in pairs else unlinked).append(case.id)
     return Linking(
         pairs=len(pairs),
-        linked=tuple(case.id for case in corpus.cases if (case.section, case.chunk) in pairs),
-        unlinked=tuple(
-            case.id for case in corpus.cases if (case.section, case.chunk) not in pairs
-        ),
+        linked=tuple(linked),
+        unlinked=tuple(unlinked),
         case_suspects=sum(
             len(suspects(corpus.root, index, BASE_REF, case_ref(case.id)))
             for case in corpus.cases

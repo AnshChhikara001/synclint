@@ -6,4 +6,6 @@ We use OpenAI for both. A maintainer installing the Action supplies one reposito
 
 We call it through the official `openai` package rather than posting to the API with `urllib`. Hand-rolling the request is close to the thirty-line bar this repository sets for taking a dependency, so the line count is not the argument. Retries, timeouts, typed errors and the structured-output plumbing are, and they are the parts that would otherwise be written badly and discovered in production. The adapter is one small class implementing `Model`, so the dependency touches exactly one file and swapping providers means writing another one.
 
+Amended when embedding links landed: there are now two adapters, `OpenAIModel` and `OpenAIEmbedder`, each behind its own protocol (`Model`, `Embedder`) in the module that owns that job. The dependency touches two files rather than one, and the argument is unchanged — one secret, one bill, and a provider swap is two small classes.
+
 The `Model` protocol is where tests inject their own, which is why none of this is reached in the test suite.

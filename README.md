@@ -102,12 +102,12 @@ replays for free:
 **The delta is one case**, and it costs 36 more links and 20 more questions to
 the model per corpus run, four of them on decoys. The pair gained is
 `shelf-capacity-default`: the prose describes a constructor default and names
-the class, and the embedding puts it next to `Shelf.__init__` (0.60) where name
-matching cannot. The other miss, a newly added method, has no chunk at the base
+the class, and the embedding puts it next to `Shelf.__init__` (0.597) where
+name matching cannot. The other miss, a newly added method, has no chunk at the base
 for anything to link to.
 
-The threshold sweep says the trade is lumpy rather than smooth — above 0.6 the
-embeddings add links but not that case, and below 0.55 they add only suspects:
+The threshold sweep says the trade is lumpy rather than smooth — at 0.6 and above
+the embeddings add links but not that case, and below 0.55 they add only suspects:
 
 | Threshold | Pairs linked | Link recall | Suspects on cases | Suspects on decoys |
 | --- | --- | --- | --- | --- |

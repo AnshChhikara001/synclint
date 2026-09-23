@@ -493,7 +493,7 @@ def test_the_command_line_says_so_when_the_corpus_was_never_embedded(
 
     assert stopped.value.code == 1
     report = capsys.readouterr().out
-    assert "no recorded embeddings, so there is no link recall" in report
+    assert "has a recorded embedding, so there is no link recall" in report
     assert "| name |" not in report
 
 

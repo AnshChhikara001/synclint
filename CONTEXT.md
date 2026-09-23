@@ -65,7 +65,7 @@ Whether a case's expected section and chunk meet as a suspect at all. The ceilin
 _Avoid_: coverage, detectable, hit
 
 **Link recall**:
-How many of the corpus's planted section-chunk pairs the index links at all, measured per mechanism. Reach restricted to the index: a pair has to be linked before a change to its chunk can make its section a suspect.
+How many of the corpus's planted section-chunk pairs the index links at all, measured by name matching alone and with embedding similarity added. Reach restricted to the index: a pair has to be linked before a change to its chunk can make its section a suspect.
 _Avoid_: link coverage, hit rate
 
 **Decoy**:
