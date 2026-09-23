@@ -5,11 +5,20 @@ from textwrap import dedent
 
 import pytest
 
-from synclint.__main__ import ANSWERS, main, render_score
+from synclint.__main__ import ANSWERS, EMBEDDINGS, main, render_links, render_score
 from synclint.analyse import Finding
 from synclint.corpus import Corpus, build_corpus
+from synclint.index import DEFAULT_SIMILARITY_THRESHOLD
+from synclint.embeddings import DEFAULT_EMBEDDING_MODEL, Embedded, EmbeddingClient
 from synclint.model import DEFAULT_MODEL, ModelClient, ModelResponse, Pricing, Spend
-from synclint.score import Score, Scored, score_corpus
+from synclint.score import (
+    LinkRecall,
+    Linking,
+    Score,
+    Scored,
+    measure_links,
+    score_corpus,
+)
 
 PRICING = Pricing(input=1.00, output=2.00)
 
@@ -418,6 +427,7 @@ def test_the_command_line_scores_a_corpus_from_its_recorded_answers(
         build_corpus(source, tmp_path / "built"),
         client(model, cache=source / ANSWERS),
     )
+    record_embeddings(source, tmp_path / "embedded")
 
     main(["score", str(source), "--model", model.name])
 
@@ -432,6 +442,21 @@ def test_the_command_line_scores_a_corpus_from_its_recorded_answers(
         "| catalogue.py::find |" in report
     )
     assert "0 model calls, $0.0000 spent." in report
+    assert "| name | 1 | 1 of 1 | 100% | 1 | 1 |" in report
+    assert "0 calls this run." in report
+
+
+def record_embeddings(source: Path, built: Path) -> None:
+    """Record the corpus's embeddings where the command line will replay them from."""
+
+    class Named(TopicEmbedder):
+        name = DEFAULT_EMBEDDING_MODEL
+
+    measure_links(
+        build_corpus(source, built),
+        EmbeddingClient(Named(), price=0.02, cache=source / EMBEDDINGS),
+        threshold=0.9,
+    )
 
 
 def test_the_command_line_refuses_to_score_what_was_never_recorded(
@@ -452,6 +477,24 @@ def test_the_command_line_refuses_to_score_what_was_never_recorded(
     report = capsys.readouterr().out
     assert "1 branch has no recorded answer" in report
     assert "Precision" not in report
+
+
+def test_the_command_line_says_so_when_the_corpus_was_never_embedded(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    model = DecidingModel()
+    source, _ = one_case(tmp_path, model)
+    score_corpus(
+        build_corpus(source, tmp_path / "built"), client(model, cache=source / ANSWERS)
+    )
+
+    with pytest.raises(SystemExit) as stopped:
+        main(["score", str(source), "--model", model.name])
+
+    assert stopped.value.code == 1
+    report = capsys.readouterr().out
+    assert "no recorded embeddings, so there is no link recall" in report
+    assert "| name |" not in report
 
 
 def test_the_command_line_will_not_score_a_corpus_with_a_fault(
@@ -523,3 +566,173 @@ def test_the_shipped_corpus_scores_what_the_readme_publishes(shipped: Corpus) ->
     ]
     assert len(reached) == 7
     assert all(result.spurious == () for result in reached)
+
+
+class TopicEmbedder:
+    """Places a text on one axis per topic word it contains.
+
+    Every text in `two_cases` carries at least one topic, so none embeds as the
+    zero vector: the catalogue page and `find` on `query`, the shelves page and
+    `Shelf.__init__` on `capacity`, and the class itself on `class`.
+    """
+
+    name = "topic-embedder"
+    TOPICS = ("capacity", "query", "class")
+
+    def embed(self, text: str) -> Embedded:
+        vector = [float(topic in text) for topic in self.TOPICS]
+        return Embedded(vector=vector, tokens=len(text.split()))
+
+
+SHELF = '''
+    class Shelf:
+        def __init__(self, capacity=50):
+            self.capacity = capacity
+    '''
+
+SHELF_SHRUNK = '''
+    class Shelf:
+        def __init__(self, capacity=40):
+            self.capacity = capacity
+    '''
+
+SHELF_DOCS = """
+    # Shelves
+
+    A new shelf takes fifty books unless you give it another capacity.
+    """
+
+SHELF_SECTION = "docs/shelves.md#Shelves"
+
+SHELF_CAPACITY_DEFAULT = {
+    "id": "shelf-capacity-default",
+    "kind": "changed-default",
+    "section": SHELF_SECTION,
+    "chunk": "shelves.py::Shelf.__init__",
+    "description": "a shelf holds forty books by default",
+}
+
+
+def two_cases(tmp_path: Path) -> Corpus:
+    """One case name matching reaches, and one only embedding similarity does."""
+    source = tmp_path / "corpus"
+    write_corpus(
+        source,
+        base={
+            "catalogue.py": CATALOGUE,
+            "shelves.py": SHELF,
+            "docs/catalogue.md": DOCS,
+            "docs/shelves.md": SHELF_DOCS,
+        },
+        cases={
+            "find-query-renamed": {"catalogue.py": RENAMED},
+            "shelf-capacity-default": {"shelves.py": SHELF_SHRUNK},
+        },
+        manifest=[FIND_QUERY_RENAMED, SHELF_CAPACITY_DEFAULT],
+        decoys={"find-keeps-its-result": {"catalogue.py": REFACTORED}},
+        decoy_manifest=[FIND_REFACTORED],
+    )
+    return build_corpus(source, tmp_path / "built")
+
+
+def test_link_recall_is_measured_by_name_alone_and_with_embeddings(
+    tmp_path: Path,
+) -> None:
+    corpus = two_cases(tmp_path)
+    embeddings = EmbeddingClient(TopicEmbedder(), price=0.02)
+
+    measured = measure_links(corpus, embeddings, threshold=0.9)
+
+    # Name matching reaches `find`, which the page names; only the embeddings
+    # reach `Shelf.__init__`, which it describes and never names.
+    assert measured.by_name.linked == ("find-query-renamed",)
+    assert measured.by_name.unlinked == ("shelf-capacity-default",)
+    assert measured.by_name.recall == 0.5
+    assert measured.with_embeddings.linked == (
+        "find-query-renamed",
+        "shelf-capacity-default",
+    )
+    assert measured.with_embeddings.recall == 1.0
+
+
+def test_link_recall_counts_what_the_extra_links_cost_in_suspects(
+    tmp_path: Path,
+) -> None:
+    corpus = two_cases(tmp_path)
+    embeddings = EmbeddingClient(TopicEmbedder(), price=0.02)
+
+    measured = measure_links(corpus, embeddings, threshold=0.9)
+
+    # Embeddings propose the pair name matching already had, which is not a
+    # new pair, and the shelf pair, which is — and which the shelf case then
+    # raises as a suspect. The decoy touches `find` and nothing else, so it
+    # raises the same one suspect either way.
+    assert measured.by_name.pairs == 1
+    assert measured.with_embeddings.pairs == 2
+    assert (measured.by_name.case_suspects, measured.by_name.decoy_suspects) == (1, 1)
+    assert (
+        measured.with_embeddings.case_suspects,
+        measured.with_embeddings.decoy_suspects,
+    ) == (2, 1)
+
+
+def test_link_recall_reports_what_embedding_the_corpus_cost(tmp_path: Path) -> None:
+    corpus = two_cases(tmp_path)
+    embeddings = EmbeddingClient(TopicEmbedder(), price=0.02)
+
+    measured = measure_links(corpus, embeddings, threshold=0.9)
+
+    assert measured.embedding_calls > 0
+    assert measured.embedding_tokens == embeddings.tokens
+    assert measured.embedding_dollars == pytest.approx(
+        embeddings.tokens * 0.02 / 1_000_000
+    )
+
+
+def test_the_link_report_sets_both_mechanisms_side_by_side() -> None:
+    measured = LinkRecall(
+        threshold=0.55,
+        by_name=Linking(
+            pairs=48,
+            linked=("a", "b"),
+            unlinked=("c",),
+            case_suspects=20,
+            decoy_suspects=11,
+        ),
+        with_embeddings=Linking(
+            pairs=84,
+            linked=("a", "b", "c"),
+            unlinked=(),
+            case_suspects=36,
+            decoy_suspects=15,
+        ),
+        embedding_calls=0,
+        embedding_tokens=2400,
+        embedding_dollars=0.000048,
+    )
+
+    report = render_links(measured)
+
+    assert "| name | 48 | 2 of 3 | 67% | 20 | 11 |" in report
+    assert "| name + embedding ≥ 0.55 | 84 | 3 of 3 | 100% | 36 | 15 |" in report
+    assert "2400 tokens, $0.000048" in report
+
+
+def test_the_shipped_corpus_links_what_the_readme_publishes(shipped: Corpus) -> None:
+    embeddings = EmbeddingClient.replaying(DEFAULT_EMBEDDING_MODEL, SHIPPED / EMBEDDINGS)
+
+    measured = measure_links(shipped, embeddings, DEFAULT_SIMILARITY_THRESHOLD)
+
+    # Every vector is recorded, so this is free; and the README quotes the rest.
+    # Change the threshold, the embedded text or the fixture and this fails,
+    # which is the moment to re-measure and rewrite the paragraph.
+    assert measured.embedding_calls == 0
+    assert measured.embedding_tokens == 2400
+    assert measured.by_name.unlinked == ("shelf-capacity-default", "catalogue-gains-merge")
+    assert measured.with_embeddings.unlinked == ("catalogue-gains-merge",)
+    assert (measured.by_name.pairs, measured.with_embeddings.pairs) == (48, 84)
+    assert (measured.by_name.case_suspects, measured.by_name.decoy_suspects) == (20, 11)
+    assert (
+        measured.with_embeddings.case_suspects,
+        measured.with_embeddings.decoy_suspects,
+    ) == (36, 15)

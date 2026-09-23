@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from synclint.analyse import Finding, analyse
+from synclint.analyse import Finding, analyse, suspects
 from synclint.corpus import BASE_REF, Corpus, case_ref, decoy_ref
-from synclint.index import build_index
+from synclint.embeddings import EmbeddingClient
+from synclint.index import Index, build_index
 from synclint.model import AnswerNotRecorded, ModelClient, Spend
 
 
@@ -74,6 +75,94 @@ class Score:
         """How much of the planted drift the run found, or `None` over no cases."""
         planted = self.true_positives + self.false_negatives
         return self.true_positives / planted if planted else None
+
+
+@dataclass(frozen=True)
+class Linking:
+    """What one set of link mechanisms reaches in the corpus, and what it costs.
+
+    `linked` and `unlinked` name the cases whose planted section and chunk
+    the index does and does not link. The suspects are summed over every case
+    and every decoy branch: each is one question a run would put to the model,
+    so they are the price of a link, and on a decoy every one of them is a
+    chance for a false positive.
+    """
+
+    pairs: int
+    linked: tuple[str, ...]
+    unlinked: tuple[str, ...]
+    case_suspects: int
+    decoy_suspects: int
+
+    @property
+    def recall(self) -> float | None:
+        """How many planted pairs the index links, or `None` over no cases."""
+        planted = len(self.linked) + len(self.unlinked)
+        return len(self.linked) / planted if planted else None
+
+
+@dataclass(frozen=True)
+class LinkRecall:
+    """Link recall by name matching alone, and with embedding similarity added.
+
+    The embedding figures are what embedding the corpus's sections and chunks
+    cost to record, whether this run recorded them or replayed them, and the
+    calls this run actually made.
+    """
+
+    threshold: float
+    by_name: Linking
+    with_embeddings: Linking
+    embedding_calls: int
+    embedding_tokens: int
+    embedding_dollars: float
+
+
+def measure_links(
+    corpus: Corpus, embeddings: EmbeddingClient, threshold: float
+) -> LinkRecall:
+    """Measure the planted pairs each linking mechanism reaches, and at what cost.
+
+    Free apart from the embeddings: no model is asked anything, because a link
+    either joins the planted section to the planted chunk or it does not. One
+    index is built with both mechanisms and the name-only figures are read
+    from its name links, so the two are measured over the same chunks and
+    sections and differ only in what the embeddings added.
+    """
+    index = build_index(corpus.root, embeddings=embeddings, threshold=threshold)
+    return LinkRecall(
+        threshold=threshold,
+        by_name=_linking(corpus, _only(index, "name")),
+        with_embeddings=_linking(corpus, index),
+        embedding_calls=embeddings.calls,
+        embedding_tokens=embeddings.tokens,
+        embedding_dollars=embeddings.dollars,
+    )
+
+
+def _only(index: Index, mechanism: str) -> Index:
+    return replace(
+        index, links=tuple(link for link in index.links if link.mechanism == mechanism)
+    )
+
+
+def _linking(corpus: Corpus, index: Index) -> Linking:
+    pairs = {(link.section, link.chunk) for link in index.links}
+    return Linking(
+        pairs=len(pairs),
+        linked=tuple(case.id for case in corpus.cases if (case.section, case.chunk) in pairs),
+        unlinked=tuple(
+            case.id for case in corpus.cases if (case.section, case.chunk) not in pairs
+        ),
+        case_suspects=sum(
+            len(suspects(corpus.root, index, BASE_REF, case_ref(case.id)))
+            for case in corpus.cases
+        ),
+        decoy_suspects=sum(
+            len(suspects(corpus.root, index, BASE_REF, decoy_ref(decoy.id)))
+            for decoy in corpus.decoys
+        ),
+    )
 
 
 @dataclass(frozen=True)

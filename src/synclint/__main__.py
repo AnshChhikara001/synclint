@@ -18,9 +18,26 @@ from synclint.corpus import (
     audit_corpus,
     build_corpus,
 )
-from synclint.index import DEFAULT_DOCUMENTATION_GLOBS, Index, build_index
-from synclint.model import DEFAULT_MODEL, PRICES, ModelClient, OpenAIModel
-from synclint.score import Score, Scored, score_corpus
+from synclint.embeddings import (
+    DEFAULT_EMBEDDING_MODEL,
+    EMBEDDING_PRICES,
+    EmbeddingClient,
+    OpenAIEmbedder,
+)
+from synclint.index import (
+    DEFAULT_DOCUMENTATION_GLOBS,
+    DEFAULT_SIMILARITY_THRESHOLD,
+    Index,
+    build_index,
+)
+from synclint.model import (
+    DEFAULT_MODEL,
+    PRICES,
+    AnswerNotRecorded,
+    ModelClient,
+    OpenAIModel,
+)
+from synclint.score import LinkRecall, Linking, Score, Scored, measure_links, score_corpus
 
 # A run checks a handful of sections, which at the default model costs cents.
 # The ceiling is here for the run that is not typical — a pull request touching
@@ -33,6 +50,9 @@ DEFAULT_CACHE = Path(".cache/synclint")
 # against, and are committed: a published accuracy figure that cannot be
 # recomputed by whoever is reading it is a claim rather than a measurement.
 ANSWERS = Path("answers")
+
+# Committed beside the answers, and for the same reason.
+EMBEDDINGS = Path("embeddings")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -56,6 +76,18 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="file to write the index to; defaults to standard output",
     )
     _add_documentation_glob(index_parser)
+    index_parser.add_argument(
+        "--embed",
+        action="store_true",
+        help=f"link by {DEFAULT_EMBEDDING_MODEL} similarity as well as by name; costs money",
+    )
+    _add_threshold(index_parser)
+    index_parser.add_argument(
+        "--cache",
+        type=Path,
+        default=DEFAULT_CACHE / EMBEDDINGS,
+        help=f"directory of recorded embeddings; defaults to {DEFAULT_CACHE / EMBEDDINGS}",
+    )
 
     analyse_parser = subcommands.add_parser(
         "analyse", help="find the documentation a change invalidated"
@@ -121,6 +153,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         default=DEFAULT_CEILING,
         help=f"dollars a recording run may spend; defaults to {DEFAULT_CEILING}",
     )
+    _add_threshold(score_parser)
 
     arguments = parser.parse_args(argv)
     if arguments.subcommand == "index":
@@ -146,9 +179,32 @@ def _add_documentation_glob(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_threshold(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=DEFAULT_SIMILARITY_THRESHOLD,
+        help=(
+            "cosine similarity at or above which a section and a chunk are linked "
+            f"by embedding; defaults to {DEFAULT_SIMILARITY_THRESHOLD}"
+        ),
+    )
+
+
+def _embedding_client(cache: Path) -> EmbeddingClient:
+    return EmbeddingClient(
+        OpenAIEmbedder(DEFAULT_EMBEDDING_MODEL),
+        price=EMBEDDING_PRICES[DEFAULT_EMBEDDING_MODEL],
+        cache=cache,
+    )
+
+
 def _index(arguments: argparse.Namespace) -> None:
     globs = arguments.documentation_globs or DEFAULT_DOCUMENTATION_GLOBS
-    document = build_index(arguments.root, globs).to_json()
+    embeddings = _embedding_client(arguments.cache) if arguments.embed else None
+    document = build_index(
+        arguments.root, globs, embeddings=embeddings, threshold=arguments.threshold
+    ).to_json()
     if arguments.out:
         arguments.out.write_text(document, encoding="utf-8")
     else:
@@ -179,6 +235,12 @@ def _score(arguments: argparse.Namespace) -> None:
         if arguments.record
         else ModelClient.replaying(arguments.model, answers)
     )
+    embedded = arguments.source / EMBEDDINGS
+    embeddings = (
+        _embedding_client(embedded)
+        if arguments.record
+        else EmbeddingClient.replaying(DEFAULT_EMBEDDING_MODEL, embedded)
+    )
     with tempfile.TemporaryDirectory() as directory:
         corpus = build_corpus(arguments.source, Path(directory) / "built")
         # The audit gates the score. A number measured over a corpus with a
@@ -187,10 +249,25 @@ def _score(arguments: argparse.Namespace) -> None:
         if audit.faults:
             sys.stdout.write(render_audit(audit))
             raise SystemExit(1)
+        # TODO: findings are still scored over name links alone, because the
+        # suspects embedding links add have no recorded answers yet. Recording
+        # them is a paid run, and the link table below says whether it is worth
+        # paying for before anyone does.
         score = score_corpus(corpus, model)
+        try:
+            links: LinkRecall | None = measure_links(corpus, embeddings, arguments.threshold)
+        except AnswerNotRecorded:
+            links = None
     sys.stdout.write(render_score(score))
-    if score.unrecorded or score.unfinished:
+    sys.stdout.write("\n" + (render_links(links) if links else _UNEMBEDDED))
+    if score.unrecorded or score.unfinished or links is None:
         raise SystemExit(1)
+
+
+_UNEMBEDDED = (
+    "The corpus has no recorded embeddings, so there is no link recall. "
+    "Record them with --record, then score again.\n"
+)
 
 
 def _paying_client(arguments: argparse.Namespace, cache: Path) -> ModelClient:
@@ -329,6 +406,46 @@ def render_score(score: Score) -> str:
         f"${score.spend.dollars:.4f} spent.",
     ]
     return "\n".join(lines) + "\n"
+
+
+def render_links(measured: LinkRecall) -> str:
+    """Render link recall for both mechanisms as markdown for the README.
+
+    The suspect columns sit beside recall because a link is not free: every
+    extra one is a question a run pays to ask, and on a decoy a chance to be
+    wrong. A recall gain that doubles the questions is a different finding
+    from one that costs nothing, and the table should not hide which it is.
+    """
+    rows = [
+        ("name", measured.by_name),
+        (f"name + embedding ≥ {measured.threshold}", measured.with_embeddings),
+    ]
+    lines = [
+        "| Links | Pairs linked | Planted pairs linked | Link recall "
+        "| Suspects on cases | Suspects on decoys |",
+        "| --- | --- | --- | --- | --- | --- |",
+        *(_linking_row(label, linking) for label, linking in rows),
+    ]
+    if measured.with_embeddings.unlinked:
+        lines += [
+            "",
+            "Linked by neither: " + ", ".join(measured.with_embeddings.unlinked) + ".",
+        ]
+    lines += [
+        "",
+        f"Embedding the corpus: {measured.embedding_tokens} tokens, "
+        f"${measured.embedding_dollars:.6f} at {DEFAULT_EMBEDDING_MODEL}'s price; "
+        f"{measured.embedding_calls} call{_plural(measured.embedding_calls)} this run.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _linking_row(label: str, linking: Linking) -> str:
+    planted = len(linking.linked) + len(linking.unlinked)
+    return (
+        f"| {label} | {linking.pairs} | {len(linking.linked)} of {planted} | "
+        f"{_rate(linking.recall)} | {linking.case_suspects} | {linking.decoy_suspects} |"
+    )
 
 
 def _gap_lines(score: Score) -> list[str]:

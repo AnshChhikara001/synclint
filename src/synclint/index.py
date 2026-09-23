@@ -14,8 +14,12 @@ from synclint.sections import Section, split_sections
 
 DEFAULT_DOCUMENTATION_GLOBS = ("README.md", "docs/**/*.md")
 
-# TODO: placeholder until the corpus has been embedded and measured.
-DEFAULT_SIMILARITY_THRESHOLD = 0.5
+# Cosine similarity, measured on the fixture corpus with text-embedding-3-small:
+# one section-chunk pair in twenty scores 0.556 or more, and this is that line
+# rounded down. It was read off the distribution of every pair rather than off
+# the planted cases, so the ground truth did not choose it — but it is still one
+# corpus, and `score --threshold` is how a different value gets argued for.
+DEFAULT_SIMILARITY_THRESHOLD = 0.55
 
 
 @dataclass(frozen=True)
