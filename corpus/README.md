@@ -127,13 +127,24 @@ so: the manifest says what each case should invalidate, and a tool that reports
 three sections to get one right is not precise. It can only push the number
 down, never up.
 
+    embeddings/       one recorded vector per section and chunk the base indexes
+
+The same run measures link recall: how many planted section-chunk pairs the
+index built at the base links at all, by name matching alone and with embedding
+similarity added, beside how many suspects each set of links raises across the
+case and the decoy branches. A link that reaches a case is worth something; one
+that only raises suspects costs a model call and, on a decoy, a chance of a
+false positive. The table shows both so a recall gain cannot hide its price.
+`--threshold` sets the similarity embedding links need.
+
 Recording is the one pass that costs money, and it is the flag that asks for it:
 
     OPENAI_API_KEY=... python -m synclint score corpus --record
 
-Answers are keyed on the question, the schema and the model name, so a figure
-recorded against one model cannot be republished as another's, and re-recording
-after a change to the prompt or the fixture asks only for what actually moved.
+Recording also embeds whatever texts have no recorded vector. Answers are keyed
+on the question, the schema and the model name, so a figure recorded against one
+model cannot be republished as another's, and re-recording after a change to the
+prompt or the fixture asks only for what actually moved.
 The directory is committed: an accuracy figure nobody else can recompute is a
 claim rather than a measurement.
 
@@ -181,7 +192,8 @@ stand:
 
 - `shelf-capacity-default` — the default lives in `Shelf.__init__`, but the
   prose documenting it names the class. Name matching links the section to
-  `Shelf`, and `Shelf` itself did not change.
+  `Shelf`, and `Shelf` itself did not change. Embedding links reach it at the
+  default threshold, but findings are still scored over name links alone.
 - `catalogue-gains-merge` — a wholly new method. `changed_chunks` reports chunks
   that exist on both sides of a diff, so an added one is invisible, and nothing
   links to a name the documentation has never used.

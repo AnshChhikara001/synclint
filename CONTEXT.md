@@ -64,6 +64,10 @@ _Avoid_: example, scenario, instance
 Whether a case's expected section and chunk meet as a suspect at all. The ceiling on what a run could possibly find before the model is asked anything, and the half of recall that costs nothing to measure. A decoy has no expected pair, so its reach is whether it raises a suspect at all — the ceiling on the false positives it could cause.
 _Avoid_: coverage, detectable, hit
 
+**Link recall**:
+How many of the corpus's planted section-chunk pairs the index links at all, measured per mechanism. Reach restricted to the index: a pair has to be linked before a change to its chunk can make its section a suspect.
+_Avoid_: link coverage, hit rate
+
 **Decoy**:
 A fixture change deliberately designed to produce no finding, used to measure the false positive rate.
 _Avoid_: negative case, control, noise

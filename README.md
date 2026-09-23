@@ -21,7 +21,9 @@ access to GitHub, so every judgement the tool makes is reachable offline.
 
 - **`build_index`** — chunks from `ast` (signature, docstring, decorators, never
   bodies), sections from markdown split at every heading, links proposed by name
-  matching. Renders to JSON and reads back.
+  matching and, optionally, by embedding similarity above a configurable
+  threshold — one numpy matrix product, no vector database (ADR-0002). Each link
+  records which mechanism proposed it. Renders to JSON and reads back.
 - **`analyse`** — the modified files at two revisions, reduced to the chunks that
   actually changed, reduced again to the sections linked to them, each put to the
   model. Comments, formatting and docstring edits do not survive a parse and so
@@ -85,7 +87,47 @@ the argument in full. Nothing about the tool's behaviour changed, and no answer
 was re-asked: the same recorded run is simply scored against ground truth that
 is no longer arguing with itself.
 
-88 tests, mypy strict, no API spend in the suite — every test replays a recorded
+### What embedding links buy
+
+The same harness measures link recall — how many planted section-chunk pairs
+the index links at all — by name matching alone and with embeddings
+(text-embedding-3-small) added. The vectors are committed too, so this also
+replays for free:
+
+| Links | Pairs linked | Planted pairs linked | Link recall | Suspects on cases | Suspects on decoys |
+| --- | --- | --- | --- | --- | --- |
+| name | 48 | 15 of 17 | 88% | 20 | 11 |
+| name + embedding ≥ 0.55 | 84 | 16 of 17 | 94% | 36 | 15 |
+
+**The delta is one case**, and it costs 36 more links and 20 more questions to
+the model per corpus run, four of them on decoys. The pair gained is
+`shelf-capacity-default`: the prose describes a constructor default and names
+the class, and the embedding puts it next to `Shelf.__init__` (0.60) where name
+matching cannot. The other miss, a newly added method, has no chunk at the base
+for anything to link to.
+
+The threshold sweep says the trade is lumpy rather than smooth — above 0.6 the
+embeddings add links but not that case, and below 0.55 they add only suspects:
+
+| Threshold | Pairs linked | Link recall | Suspects on cases | Suspects on decoys |
+| --- | --- | --- | --- | --- |
+| 0.65 | 55 | 88% | 22 | 11 |
+| 0.60 | 61 | 88% | 24 | 12 |
+| 0.55 | 84 | 94% | 36 | 15 |
+| 0.50 | 124 | 94% | 48 | 23 |
+| 0.45 | 164 | 94% | 60 | 26 |
+
+0.55 is the 95th percentile of similarity over every section-chunk pair in the
+corpus, chosen from that distribution rather than from the cases. Embedding the
+corpus's 75 sections and chunks cost 2,400 tokens, **$0.000048**. On a corpus
+whose pages name what they document, name matching was already doing nearly all
+the work; embeddings are a narrow fix for one shape of miss, not a general
+improvement.
+
+Findings are still scored over name links. The extra suspects have no recorded
+answers yet, so whether the model then finds the shelf case is unmeasured.
+
+106 tests, mypy strict, no API spend in the suite — every test replays a recorded
 answer or injects a fake.
 
 ## Limitations
@@ -100,10 +142,12 @@ answer or injects a fake.
   link it proposes is wrong — `id`, `write`, `spend` and `git` all match as
   ordinary English words in prose. The 100% above is precision over findings on
   a well-behaved corpus, and it is not a claim about links in general.
-  Embedding links are meant to help; how much is a number this project owes.
-- **A default declared in a constructor is unreachable.** The default lives in
-  `__init__` while the prose names the class, so nothing links the two. Every
-  constructor default in every repository has this shape.
+- **Embedding links are costly for what they add.** One planted pair gained for
+  20 more suspects per corpus run, on one small corpus with one embedding model.
+  The threshold was set on this corpus and may not transfer.
+- **A default declared in a constructor is unreachable by name.** The default
+  lives in `__init__` while the prose names the class. Embedding links reach the
+  corpus's one example; whether they reach it in general is unmeasured.
 - **A chunk the change adds is invisible.** Chunk comparison reports only chunks
   present on both sides of a diff, so a newly added function the documentation
   never mentions goes unreported.
