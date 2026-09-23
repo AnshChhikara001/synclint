@@ -30,8 +30,8 @@ access to GitHub, so every judgement the tool makes is reachable offline.
 - **Spend control** — every model response cached on disk by prompt, a ledger of
   tokens and dollars, and a ceiling checked before each call rather than after.
 - **Fixture corpus** — `corpus/` holds a small library with documentation,
-  twenty deliberately planted drift cases and ten decoys that must produce
-  nothing, with ground truth for each. See its own README.
+  seventeen deliberately planted drift cases and thirteen decoys that must
+  produce nothing, with ground truth for each. See its own README.
 - **Accuracy harness** — `python -m synclint score corpus` runs every case and
   every decoy through `analyse` and matches what came back against the ground
   truth. It replays recorded answers and cannot make a call, so the numbers
@@ -44,47 +44,57 @@ Not yet built: the repair and validation passes, rules-gated confidence, the
 
 Against the fixture corpus, with gpt-5.4-mini at low reasoning effort. Recording
 the 31 answers cost $0.0217; replaying them costs nothing and gives the same
-figures every time.
+figures every time:
+
+    python -m synclint score corpus
 
 | Drift kind | Planted | Found | Recall |
 | --- | --- | --- | --- |
 | renamed-parameter | 5 | 1 | 20% |
 | changed-default | 5 | 3 | 60% |
 | removed-capability | 5 | 5 | 100% |
-| undocumented-feature | 5 | 1 | 20% |
-| All | 20 | 10 | 50% |
+| contradicted-claim | 2 | 1 | 50% |
+| All | 17 | 10 | 59% |
 
-**Precision 100%** (10 true positives, 0 false positives). **Recall 50%.** Of
-the ten decoys, six raise no suspect and cannot produce a finding at all; the
-four internal refactors that do reach the model were all cleared by it.
+**Precision 100%** (10 true positives, 0 false positives). **Recall 59%.** Of
+the thirteen decoys, six raise no suspect and cannot produce a finding at all;
+the seven that do reach the model were all cleared by it.
 
 Precision is perfect because the model is conservative, and that conservatism is
-where half the recall goes. Two of the ten misses never reach the model, and the
-other eight are suspects it saw and cleared:
+where the missing recall goes. Two of the seven misses never reach the model,
+and the other five are suspects it saw and cleared:
 
 - **Four of the five `renamed-parameter` cases.** `find(query)` documented,
   `find(text)` shipped, and the model judged that a reader following the page is
-  not misled. Anyone calling it by keyword gets a `TypeError`.
-- **Three of the five `undocumented-feature` cases**, because the verification
-  prompt tells it to clear them: *a section that never mentioned the thing that
-  changed has not drifted*. The prompt and the corpus disagree about whether a
-  documented function quietly gaining a parameter is drift. One of them is
-  wrong, and this is the number that says so.
+  not misled. Anyone calling it by keyword gets a `TypeError`. This is the one
+  that should be fixed and the number that will say whether it was.
 - **One `changed-default` case**, where `read_csv` stopped skipping invalid rows
   and started raising on them.
 - **Two never reach the model at all** — a default that lives in `__init__`
   while the prose names the class, and a wholly new method. Both are recorded
   in the manifest as the gaps in the tool that they are.
 
+The first run of this harness scored 50%, not 59%, and the difference is not an
+improvement to the tool: it is the corpus admitting it was wrong. Five cases
+asserted that code gaining an undocumented parameter is drift, which the
+verification prompt denies in as many words and the glossary settles against —
+drift is a section that is *inaccurate*, and a page that never mentioned the new
+parameter is merely silent. Three of those five are decoys now, and the two
+whose pages make a claim the change falsifies stayed. `corpus/README.md` has
+the argument in full. Nothing about the tool's behaviour changed, and no answer
+was re-asked: the same recorded run is simply scored against ground truth that
+is no longer arguing with itself.
+
 88 tests, mypy strict, no API spend in the suite — every test replays a recorded
 answer or injects a fake.
 
 ## Limitations
 
-- **Recall is half, and the prompt is the reason for most of it.** Nothing here
-  is tuned yet: the figures above are the first measurement, taken at low
-  reasoning effort on the cheapest model. Whether either is set too mean is now
-  a question the harness can answer for two cents.
+- **Two in five planted cases still go unfound.** Nothing here is tuned: the
+  figures above are the first measurement, taken at low reasoning effort on the
+  cheapest model, and a renamed parameter — the easiest drift there is — is
+  found one time in five. Whether the effort or the prompt is to blame is a
+  question the harness can now answer for two cents.
 - **Name matching is permissive.** It costs nothing on the corpus, whose pages
   are short and name what they document, but pointed at this repository every
   link it proposes is wrong — `id`, `write`, `spend` and `git` all match as

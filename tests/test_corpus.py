@@ -261,7 +261,7 @@ def test_an_unknown_kind_and_an_unclaimed_overlay_are_faults(tmp_path: Path) -> 
 
     assert audit.faults == (
         "find-query-renamed: kind renamed-argument is not one of "
-        "renamed-parameter, changed-default, removed-capability, undocumented-feature",
+        "renamed-parameter, changed-default, removed-capability, contradicted-claim",
         "half-written: an overlay with no case in the manifest",
     )
 
@@ -531,7 +531,7 @@ def test_an_unknown_decoy_kind_and_an_unclaimed_decoy_overlay_are_faults(
 
     assert audit.faults == (
         "find-reflowed: kind whitespace is not one of internal-refactor, "
-        "comment-edit, test-only, formatting",
+        "added-parameter, comment-edit, test-only, formatting",
         "half-written: an overlay with no decoy in the manifest",
     )
 
@@ -584,7 +584,7 @@ def audited(shipped: Corpus) -> Audit:
     return audit_corpus(shipped)
 
 
-def test_the_shipped_corpus_plants_twenty_cases_and_holds_together(
+def test_the_shipped_corpus_plants_seventeen_cases_and_holds_together(
     shipped: Corpus, audited: Audit
 ) -> None:
     corpus = shipped
@@ -592,14 +592,17 @@ def test_the_shipped_corpus_plants_twenty_cases_and_holds_together(
     audit = audited
 
     assert audit.faults == ()
-    assert len(corpus.cases) == 20
+    assert len(corpus.cases) == 17
     kinds = Counter(case.kind for case in corpus.cases)
     assert set(kinds) == set(KINDS)
-    assert min(kinds.values()) >= 4
+    # Not five of each any more. `contradicted-claim` holds the two cases left
+    # when `undocumented-feature` split, and planting more needs a recording
+    # pass, so what the corpus owes is every kind represented, not a balance.
+    assert min(kinds.values()) >= 2
     # How many of them synclint reaches is a measurement rather than a
     # requirement — the manifest is ground truth, and a case nothing reaches is
     # a gap to be reported. What the corpus owes is an answer for every case.
-    assert len(audit.reachable) + len(audit.unreachable) == 20
+    assert len(audit.reachable) + len(audit.unreachable) == 17
 
 
 CATALOGUE_AND_SHELVE = """
@@ -689,11 +692,11 @@ def test_analyse_over_the_corpus_reports_the_cases_the_manifest_expects(
     assert reported
 
 
-def test_the_shipped_corpus_plants_ten_decoys_across_every_kind(
+def test_the_shipped_corpus_plants_thirteen_decoys_across_every_kind(
     shipped: Corpus, audited: Audit
 ) -> None:
     assert audited.faults == ()
-    assert len(shipped.decoys) == 10
+    assert len(shipped.decoys) == 13
     kinds = Counter(decoy.kind for decoy in shipped.decoys)
     assert set(kinds) == set(DECOY_KINDS)
     assert min(kinds.values()) >= 2

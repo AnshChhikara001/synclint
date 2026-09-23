@@ -7,7 +7,8 @@
 # case to be rewritten.
 #
 # Kinds: renamed-parameter, changed-default, removed-capability,
-# undocumented-feature. Five of each.
+# contradicted-claim. Five of each of the first three; two of the last, for the
+# reason corpus/README.md gives under "What drift is not".
 
 [[case]]
 id = "find-query-renamed"
@@ -115,47 +116,27 @@ chunk = "bookshelf/shelves.py::Shelf.titles"
 description = "titles no longer takes sort; it is always alphabetical"
 
 [[case]]
-id = "find-gains-author-filter"
-kind = "undocumented-feature"
-section = "docs/catalogue.md#Catalogue > Finding books"
-chunk = "bookshelf/catalogue.py::Catalogue.find"
-description = "find takes an author filter the page never mentions"
-
-[[case]]
-id = "read-csv-gains-encoding"
-kind = "undocumented-feature"
-section = "docs/importing.md#Importing > Reading a CSV"
-chunk = "bookshelf/importer.py::read_csv"
-description = "read_csv takes an encoding the page never mentions"
-
-[[case]]
-id = "save-gains-compression"
-kind = "undocumented-feature"
-section = "docs/storage.md#Storage > Saving"
-chunk = "bookshelf/storage.py::save"
-description = "save can gzip the file, which the page never mentions"
-
-[[case]]
 id = "is-valid-gains-isbn10"
-kind = "undocumented-feature"
+kind = "contradicted-claim"
 section = "docs/isbn.md#ISBNs > Validating"
 chunk = "bookshelf/isbn.py::is_valid"
 description = "ten-digit ISBNs validate now, where the page says they never do"
 
 [[case]]
 id = "catalogue-gains-merge"
-kind = "undocumented-feature"
+kind = "contradicted-claim"
 section = "docs/catalogue.md#Catalogue"
 chunk = "bookshelf/catalogue.py::Catalogue.merge"
-description = "the catalogue gained merge and entries, which the page never lists"
+description = "the catalogue gained merge and entries, where the page says everything it can do is listed"
 
 # Decoys: changes that must produce no finding, so that a precision figure has
 # negative cases to be computed over. A decoy carries no section and no chunk
 # because what it asserts is an absence. Its kind is a claim about the change —
-# `internal-refactor` really does change a chunk, the other three really do not
-# — and the audit holds each decoy to it.
+# `internal-refactor` and `added-parameter` really do change a chunk, the other
+# three really do not — and the audit holds each decoy to it.
 #
-# Kinds: internal-refactor, comment-edit, formatting, test-only.
+# Kinds: internal-refactor, added-parameter, comment-edit, formatting,
+# test-only.
 
 [[decoy]]
 id = "is-valid-weights-hoisted"
@@ -206,3 +187,25 @@ description = "loans gains a test module"
 id = "tests-cover-isbn-rejections"
 kind = "test-only"
 description = "the ISBN tests cover what is rejected, not only what is accepted"
+
+# An `added-parameter` decoy is a documented function that quietly gains an
+# optional parameter the page does not mention. The page is now incomplete and
+# still accurate, and synclint reports what is inaccurate — so these must
+# produce nothing. All three were planted as drift cases first, and the accuracy
+# harness is what showed that the verification prompt and the manifest disagreed
+# about them.
+
+[[decoy]]
+id = "find-gains-author-filter"
+kind = "added-parameter"
+description = "find takes an author filter the page never mentions"
+
+[[decoy]]
+id = "read-csv-gains-encoding"
+kind = "added-parameter"
+description = "read_csv takes an encoding the page never mentions"
+
+[[decoy]]
+id = "save-gains-compression"
+kind = "added-parameter"
+description = "save can gzip the file, which the page never mentions"

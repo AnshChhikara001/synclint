@@ -2,8 +2,8 @@
 
 Every accuracy number synclint publishes comes from here. The corpus is a small
 Python library — `bookshelf`, eleven modules, nine markdown pages and a couple
-of test modules — with twenty deliberately planted drift cases against it and
-ten decoys that must produce nothing at all.
+of test modules — with seventeen deliberately planted drift cases against it and
+thirteen decoys that must produce nothing at all.
 
 ## Layout
 
@@ -25,17 +25,19 @@ decoy:
 
 ## The cases
 
-Five of each of four kinds:
+Four kinds, five of each of the first three:
 
-| Kind | What it is |
-|---|---|
-| `renamed-parameter` | a documented parameter is called something else now |
-| `changed-default` | a documented default value is different |
-| `removed-capability` | something the documentation promises is gone |
-| `undocumented-feature` | the code gained something the documentation never mentions |
+| Kind | How many | What it is |
+|---|---|---|
+| `renamed-parameter` | 5 | a documented parameter is called something else now |
+| `changed-default` | 5 | a documented default value is different |
+| `removed-capability` | 5 | something the documentation promises is gone |
+| `contradicted-claim` | 2 | the page states something the code now falsifies |
 
 Every case changes code only. A planted case that edited a markdown file would
 have repaired the drift it was meant to plant, so the audit refuses one.
+
+`contradicted-claim` is the odd one at two, and the reason is below.
 
 ## The decoys
 
@@ -46,15 +48,16 @@ meaningless. Each one is a change a reviewer would recognise as real work.
 | Kind | How many | What it is |
 |---|---|---|
 | `internal-refactor` | 4 | the body rewritten, behaviour and signature untouched |
+| `added-parameter` | 3 | a documented function gains an optional parameter the page never mentions |
 | `comment-edit` | 2 | comments and docstrings, no code |
 | `formatting` | 2 | wrapped to a shorter line length |
 | `test-only` | 2 | a test module added, or an existing one extended |
 
-Only the four refactors reach the model. The other six cannot produce a finding
-whatever a model would have said about them: comments and layout do not survive
-a parse, docstrings are stripped before the comparison (ADR-0004), and test
-files are dropped whole. Six decoys measure the design, then, and four measure
-the judgement — and the four are where a precision figure is actually earned.
+Seven reach the model. The other six cannot produce a finding whatever a model
+would have said about them: comments and layout do not survive a parse,
+docstrings are stripped before the comparison (ADR-0004), and test files are
+dropped whole. Six decoys measure the design, then, and seven measure the
+judgement — and the seven are where a precision figure is actually earned.
 
 A kind is a claim about the change, and the audit holds the decoy to as much of
 it as it can see. An `internal-refactor` that changes no chunk is a no-op
@@ -134,10 +137,46 @@ after a change to the prompt or the fixture asks only for what actually moved.
 The directory is committed: an accuracy figure nobody else can recompute is a
 claim rather than a measurement.
 
+## What drift is not
+
+Three of the `added-parameter` decoys were planted as drift cases. They were
+wrong, and the accuracy harness is what proved it.
+
+`undocumented-feature` used to be a kind: five cases asserting that code gaining
+something the documentation never mentions is drift. The verification prompt
+asserts the opposite in as many words — *a section that never mentioned the
+thing that changed has not drifted* — and the glossary is on the prompt's side:
+drift is a section describing its chunk **inaccurately**. A page that never
+mentioned `encoding` is not inaccurate about `encoding`. It is silent, and
+silence is incompleteness. synclint reports what is wrong, not what is missing.
+
+The first scored run put the disagreement on the page: four of the five cases
+were cleared by the model, exactly as its instructions told it to. So the kind
+split on the evidence rather than the label:
+
+- `find-gains-author-filter`, `read-csv-gains-encoding` and
+  `save-gains-compression` are omissions. Their pages say nothing about the new
+  parameter and nothing they do say became false. They are `added-parameter`
+  decoys now, and reporting one is a false positive.
+- `is-valid-gains-isbn10` and `catalogue-gains-merge` are not omissions. One
+  page says a ten-digit ISBN "is always rejected"; the other says "everything
+  the catalogue can do is on this page". Both claims are false once the change
+  lands. They stayed as cases under `contradicted-claim`.
+
+The three that moved kept their overlays and their commits byte for byte, so
+every recorded answer still replays. Nothing was re-asked, and nothing about the
+measurement moved except what it was being compared against — which is the
+point: the ground truth changed because it was wrong, and the tool's behaviour
+did not change at all.
+
+`contradicted-claim` holds two cases where the others hold five. Planting three
+more needs a recording pass, so it is short and says so rather than being
+padded with cases the corpus does not have.
+
 ## What the manifest is not
 
 The manifest is ground truth, written by hand, and deliberately independent of
-what synclint can detect today. Two of the twenty are out of reach as things
+what synclint can detect today. Two of the seventeen are out of reach as things
 stand:
 
 - `shelf-capacity-default` — the default lives in `Shelf.__init__`, but the

@@ -46,6 +46,16 @@ class Report:
     spend: Spend
 
 
+# The second paragraph draws synclint's boundary: silence is not inaccuracy. A
+# page that never mentioned the parameter a function just gained is incomplete,
+# and this tool reports what is wrong rather than what is missing. That line was
+# written here before the corpus was planted, and the corpus contradicted it —
+# five cases asserted an undocumented feature was drift. The corpus was wrong
+# and now says so: three of the five are `added-parameter` decoys, and the two
+# whose prose makes a claim the code falsifies stayed as cases.
+# Changing a word of this invalidates every recorded answer, because the cache
+# key is a hash of it. Re-record the corpus in the same commit or the published
+# numbers stop being reproducible.
 _SYSTEM = """\
 You verify whether documentation still describes code accurately.
 

@@ -25,7 +25,7 @@ The complete set of chunks, sections, and links for a repository at a point in t
 _Avoid_: graph, store, database, embedding store
 
 **Drift**:
-The state of a section describing its linked chunk inaccurately, because the chunk changed and the section did not.
+The state of a section describing its linked chunk inaccurately, because the chunk changed and the section did not. Inaccuracy, not incompleteness: a section that never mentioned the thing that changed has not drifted, and a section whose claim the change has falsified has. The corpus measures that boundary from both sides.
 _Avoid_: staleness, rot, decay, divergence
 
 **Suspect**:

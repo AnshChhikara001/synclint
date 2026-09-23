@@ -497,7 +497,7 @@ def test_every_question_the_shipped_corpus_asks_has_a_recorded_answer(
     assert score.unrecorded == ()
     assert score.unfinished == 0
     assert score.spend == Spend()
-    assert score.true_positives + score.false_negatives == 20
+    assert score.true_positives + score.false_negatives == 17
 
 
 def test_scoring_the_shipped_corpus_twice_gives_the_same_numbers(
@@ -513,13 +513,13 @@ def test_the_shipped_corpus_scores_what_the_readme_publishes(shipped: Corpus) ->
     # drifting apart: change the prompt, the model or the linker and this
     # fails, which is the moment to re-record and rewrite the paragraph.
     assert score.true_positives == 10
-    assert score.false_negatives == 10
+    assert score.false_negatives == 7
     assert score.false_positives == 0
-    assert score.recall == 0.5
+    assert score.recall == 10 / 17
     assert score.precision == 1.0
 
     reached = [
         result for result in score.branches if result.decoy and result.verified
     ]
-    assert len(reached) == 4
+    assert len(reached) == 7
     assert all(result.spurious == () for result in reached)

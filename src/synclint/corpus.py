@@ -21,7 +21,7 @@ KINDS = (
     "renamed-parameter",
     "changed-default",
     "removed-capability",
-    "undocumented-feature",
+    "contradicted-claim",
 )
 
 
@@ -41,6 +41,7 @@ class DecoyKind:
 
 DECOY_KINDS = {
     "internal-refactor": DecoyKind(changes_chunks=True),
+    "added-parameter": DecoyKind(changes_chunks=True),
     "comment-edit": DecoyKind(changes_chunks=False),
     "test-only": DecoyKind(changes_chunks=False, test_files_only=True),
     "formatting": DecoyKind(changes_chunks=False),
