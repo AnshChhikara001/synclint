@@ -48,12 +48,23 @@ access to GitHub, so every judgement the tool makes is reachable offline.
 - **Fixture corpus** — `corpus/` holds a small library with documentation,
   seventeen deliberately planted drift cases and thirteen decoys that must
   produce nothing, with ground truth for each. See its own README.
+- **`publish`** — `analyse --pull-request N` writes the report to the pull
+  request. One summary comment, found by a hidden marker and edited in place on
+  every push: sections checked, how many are accurate, repaired and flagged,
+  each linked to the lines it reads on, each flag with its reason and the
+  rewrite that was tried. Repairs go out as one commit on
+  `synclint/repairs-N`, in a pull request targeting the branch under review.
+  Two repairs to one section, or a section that no longer reads as it did when
+  analysed, stay in the comment instead. `publish` decides nothing itself: the
+  routing is a function of the report, tested without GitHub. Stdlib `urllib`,
+  no GitHub SDK.
 - **Accuracy harness** — `python -m synclint score corpus` runs every case and
   every decoy through `analyse` and matches what came back against the ground
   truth. It replays recorded answers and cannot make a call, so the numbers
   below cost nothing to reproduce and do not move between runs.
 
-Not yet built: the `publish` step and the Action itself.
+Not yet built: the Action itself — `action.yml`, the container, the workflow
+(#13). `publish` has not yet run against a live pull request.
 
 ## Measured so far
 
@@ -193,7 +204,7 @@ guard refused all seven, and one repair in ten came out proposed and correct.
 That cost $0.0114 and is reverted. Commit `68c98d0` keeps its answers, so the
 numbers can be recomputed.
 
-149 tests, mypy strict, no API spend in the suite — every test replays a recorded
+171 tests, mypy strict, no API spend in the suite — every test replays a recorded
 answer or injects a fake.
 
 ## Limitations
@@ -232,8 +243,15 @@ answer or injects a fake.
   holds only in name. Text kept measures the damage; nothing bounds it.
 - **Quotes must match exactly.** Three of ten repairs were lost to that, two to
   a trailing newline.
-- **A pull request from a fork cannot be written to**, so repairs degrade to a
-  comment. Deliberate, and stated in the comment rather than failing quietly.
+- **A pull request from a fork cannot be written to**, so repairs degrade to
+  diffs in the comment, and so does a token GitHub answers 403. Deliberate, and
+  stated in the comment rather than failing quietly. But a fork's
+  `pull_request` run gets a token that cannot comment either; which trigger
+  gets around that without handing fork code a write token is #13's problem.
+- **The repair branch is rebuilt on every push.** Repairs are recomputed
+  against the new head, so a human's amendment to `synclint/repairs-N` is
+  overwritten, and a repair pull request stays open after a push that leaves
+  nothing to repair.
 
 `CONTEXT.md` is the glossary; `docs/adr/` holds the decisions and what was
 rejected.
