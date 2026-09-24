@@ -47,13 +47,10 @@ has made wrong. Rewrite only the words that are now wrong. Everything the
 section says that is still true stays exactly as it is.
 
 Answer with edits. Each edit quotes a span of the section exactly as it is
-written, line breaks included, and gives the text to put in its place. Quote
-only the words that are wrong, and no more of the words around them than it
-takes for the span to appear once in the section; to remove a sentence, quote
-that sentence. Never quote the whole section: an edit that replaces all of it is
-a rewrite, and is refused. Write replacements in the section's own voice: its
-tense, its person, and how it writes numbers and code. Add no headings, lists or
-examples the section did not already have."""
+written, line breaks included, and gives the text to put in its place. Quote as
+little as makes the span appear only once in the section. Write replacements in
+the section's own voice: its tense, its person, and how it writes numbers and
+code. Add no headings, lists or examples the section did not already have."""
 
 _REPAIR_SCHEMA: dict[str, object] = {
     "type": "object",
@@ -150,16 +147,19 @@ def _apply(text: str, edits: list[_Edit]) -> str:
     contains twice, has no one place to go, and two edits over the same words
     have no order to go in.
     """
+    # TODO: nine of the corpus's ten repairs quote the whole section, so the
+    # byte-identity this function guarantees covers nothing, and "text kept"
+    # in the score is what actually measures how much was left alone. Telling
+    # the model to quote small and refusing a whole-section quote was tried
+    # and refuted (commit 68c98d0): seven of ten still quoted everything, so
+    # the guard refused nearly every repair. Two of those quotes also carry a
+    # newline the section does not end with, and are refused here for it.
+    # What would work is unknown — a higher reasoning effort, or a rewrite
+    # diffed back to edits in code — and each is a paid re-record.
     spans: list[tuple[int, int, str]] = []
     for edit in edits:
         if not edit.find:
             raise _Unappliable("the repair quoted nothing to replace")
-        # The first recording quoted the whole section in nine repairs of ten,
-        # which leaves nothing outside the edit for byte-identity to protect.
-        # Compared stripped, because two of those quotes carried a newline the
-        # section does not end with.
-        if edit.find.strip() == text.strip():
-            raise _Unappliable("the repair quoted the whole section, which is a rewrite")
         start = text.find(edit.find)
         if start < 0:
             raise _Unappliable(

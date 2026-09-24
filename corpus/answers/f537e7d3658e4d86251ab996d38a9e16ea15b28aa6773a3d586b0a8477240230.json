@@ -1,8 +1,0 @@
-{
-  "model": "gpt-5.4-mini",
-  "system": "You check a proposed repair to a section of documentation before anyone reads it.\n\nYou are given the section as it stands, the chunk of code it describes as it\nread before a change and as it reads after, what the change made wrong, and the\nsection as the repair would leave it. Pass the repair only if all three hold:\nit describes the code as it reads after the change; everything the section said\nthat is still true survives it; and it reads as though the section's own author\nwrote it.\n\nIf you reject it, say in one sentence why. If you pass it, leave the reason\nempty.",
-  "user": "Documentation section docs/loans.md#Loans > Renewing:\n\n`renew(loan)` returns a fresh `Loan` for the same book and borrower, due\nfourteen days from today rather than fourteen days from the original due date.\n\nThe chunk bookshelf/loans.py::renew before the change:\n\ndef renew(loan, days=14):\n    return Loan(book=loan.book, borrower=loan.borrower, due=date.today() + timedelta(days=days))\n\nAnd after it:\n\ndef renew(loan, days=7):\n    return Loan(book=loan.book, borrower=loan.borrower, due=date.today() + timedelta(days=days))\n\nWhat the change made wrong: `renew(loan)` now defaults to a due date 7 days from today, not 14 days as the documentation says.\n\nThe section as the repair would leave it:\n\n`renew(loan)` returns a fresh `Loan` for the same book and borrower, due\nseven days from today rather than fourteen days from the original due date.",
-  "text": "{\"valid\":false,\"reason\":\"It still says the loan is due fourteen days from the original due date, but `renew(loan)` now sets the due date from today.\"}",
-  "input_tokens": 402,
-  "output_tokens": 285
-}

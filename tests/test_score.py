@@ -697,15 +697,22 @@ def test_the_shipped_corpus_scores_what_the_readme_publishes(shipped: Corpus) ->
     repairs = {branch.id: branch.repair for branch in score.branches if branch.repair}
     assert len(repairs) == 10
     proposed = {case for case, repair in repairs.items() if repair.proposed}
-    assert proposed == {"write-csv-columns-default", "remove-returns-nothing"}
+    assert proposed == {
+        "write-json-path-renamed",
+        "write-csv-columns-default",
+        "matches-case-sensitive-default",
+        "load-drops-create-missing",
+        "overdue-drops-grace",
+        "titles-drops-sort",
+        "is-valid-gains-isbn10",
+    }
     assert [case for case in proposed if not repairs[case].correct] == [
-        "remove-returns-nothing"
+        "is-valid-gains-isbn10"
     ]
-    # Seven quoted the whole section and were refused before validation saw
-    # them; the eighth reached validation and was refused there.
-    unapplied = {case for case, repair in repairs.items() if repair.kept is None}
-    assert len(unapplied) == 7
-    assert "renew-days-default" not in unapplied | proposed
+    # The three flagged had edits that could not be applied at all.
+    assert all(
+        repair.kept is None for case, repair in repairs.items() if case not in proposed
+    )
 
 
 class TopicEmbedder:

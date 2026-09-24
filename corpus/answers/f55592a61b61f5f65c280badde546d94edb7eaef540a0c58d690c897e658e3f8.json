@@ -1,8 +1,0 @@
-{
-  "model": "gpt-5.4-mini",
-  "system": "You check a proposed repair to a section of documentation before anyone reads it.\n\nYou are given the section as it stands, the chunk of code it describes as it\nread before a change and as it reads after, what the change made wrong, and the\nsection as the repair would leave it. Pass the repair only if all three hold:\nit describes the code as it reads after the change; everything the section said\nthat is still true survives it; and it reads as though the section's own author\nwrote it.\n\nIf you reject it, say in one sentence why. If you pass it, leave the reason\nempty.",
-  "user": "Documentation section docs/catalogue.md#Catalogue > Removing books:\n\n`Catalogue.remove(isbn)` drops a book and returns the `Book` it removed, so you\ncan put it straight onto a shelf or hand it to someone. An ISBN the catalogue\ndoes not hold raises `KeyError`.\n\nThe chunk bookshelf/catalogue.py::Catalogue.remove before the change:\n\ndef remove(self, isbn):\n    return self._books.pop(normalise(isbn))\n\nAnd after it:\n\ndef remove(self, isbn):\n    del self._books[normalise(isbn)]\n\nWhat the change made wrong: `Catalogue.remove(isbn)` no longer returns the removed `Book`; it now deletes the entry and returns `None`.\n\nThe section as the repair would leave it:\n\n`Catalogue.remove(isbn)` drops a book and returns `None`, so you\ncannot put it straight onto a shelf or hand it to someone. An ISBN the catalogue\ndoes not hold raises `KeyError`.",
-  "text": "{\"valid\":true,\"reason\":\"\"}",
-  "input_tokens": 388,
-  "output_tokens": 55
-}
