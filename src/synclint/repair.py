@@ -120,8 +120,8 @@ def repair(
 
     Raises `SpendCeilingExceeded` rather than make a call past the ceiling.
     """
-    question = _question(section, change, explanation)
-    answer = json.loads(model.complete(_REPAIR, question, _REPAIR_SCHEMA))
+    asked = question(section, change, explanation)
+    answer = json.loads(model.complete(_REPAIR, asked, _REPAIR_SCHEMA))
     edits = [_Edit(edit["find"], edit["replace"]) for edit in answer["edits"]]
     try:
         repaired = _apply(section.text, edits)
@@ -131,7 +131,7 @@ def repair(
     verdict = json.loads(
         model.complete(
             _VALIDATE,
-            question + f"\n\nThe section as the repair would leave it:\n\n{repaired}",
+            asked + f"\n\nThe section as the repair would leave it:\n\n{repaired}",
             _VALIDATE_SCHEMA,
         )
     )
@@ -184,7 +184,12 @@ def _apply(text: str, edits: list[_Edit]) -> str:
     return repaired
 
 
-def _question(section: Section, change: ChunkChange, explanation: str) -> str:
+def question(section: Section, change: ChunkChange, explanation: str) -> str:
+    """What every question about repairing `section` opens with.
+
+    Shared with the confidence pass, so that a score is given over exactly
+    what the repair and its validation were shown.
+    """
     return (
         f"Documentation section {section.id}:\n\n{section.text}\n\n"
         f"The chunk {change.chunk} before the change:\n\n{change.before}\n\n"
