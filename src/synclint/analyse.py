@@ -6,8 +6,10 @@ import difflib
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from synclint.changes import ChunkChange, touched_chunks
+from synclint.confidence import DEFAULT_THRESHOLD, outside, rate, shape_of
 from synclint.index import Index
 from synclint.model import ModelClient, Spend, SpendCeilingExceeded
 from synclint.repair import Rejected, repair
@@ -33,11 +35,17 @@ class Finding:
 
 @dataclass(frozen=True)
 class Repair:
-    """A finding resolved to a rewritten section that passed validation."""
+    """A finding resolved to a rewritten section safe to propose.
+
+    It passed validation, its change has one of the shapes the gate admits,
+    and the model's `confidence` in it reached the threshold.
+    """
 
     finding: Finding
     original: str
     repaired: str
+    shape: str
+    confidence: float
 
     @property
     def diff(self) -> str:
@@ -54,18 +62,30 @@ class Repair:
         )
 
 
+# Why a finding was flagged rather than repaired. The repair's edits could not
+# be applied; validation refused the rewrite; the change is outside the gate;
+# the model's confidence inside it fell short of the threshold; or the run
+# reached its spend ceiling first.
+Cause = Literal["unappliable", "refused", "outside", "doubted", "ceiling"]
+
+
 @dataclass(frozen=True)
 class Flag:
     """A finding surfaced for a human rather than repaired, and why.
 
     `attempt` is the rewrite that was refused, where there was one to refuse,
-    and `original` the section it would have replaced.
+    and `original` the section it would have replaced. `shape` is the gate's
+    name for the change, `None` outside it, and `confidence` the model's score,
+    `None` unless the repair got far enough to be given one.
     """
 
     finding: Finding
     reason: str
     original: str
     attempt: str | None
+    cause: Cause
+    shape: str | None = None
+    confidence: float | None = None
 
 
 @dataclass(frozen=True)
@@ -135,7 +155,13 @@ _SCHEMA: dict[str, object] = {
 
 
 def analyse(
-    root: Path, index: Index, base: str, head: str, model: ModelClient
+    root: Path,
+    index: Index,
+    base: str,
+    head: str,
+    model: ModelClient,
+    *,
+    threshold: float = DEFAULT_THRESHOLD,
 ) -> Report:
     """Report the sections of `root` that the change from `base` to `head` invalidated.
 
@@ -144,8 +170,10 @@ def analyse(
     and found accurate are reported too, so that silence about a section means
     it was never a suspect rather than that it passed.
 
-    Each finding is then repaired, and the repair validated; one that fails
-    validation becomes a flag instead.
+    Each finding is then repaired, and the repair validated. It is proposed
+    only if validation passes it, its change has a shape the gate admits, and
+    the model's confidence in it reaches `threshold`; otherwise it becomes a
+    flag that says which of those it failed.
 
     A run that reaches its spend ceiling returns what it has rather than
     raising: the findings are already paid for, and the report says how many
@@ -166,12 +194,12 @@ def analyse(
         if finding is not None:
             drifted.append((suspect, finding))
 
-    repairs, flags = _resolve(model, drifted)
+    repairs, flags = _resolve(model, drifted, threshold)
     return Report(
         findings=tuple(finding for _, finding in drifted),
         verified=tuple(dict.fromkeys(verified)),
         unchecked=unchecked,
-        unrepaired=sum(1 for flag in flags if flag.reason == _UNREPAIRED),
+        unrepaired=sum(1 for flag in flags if flag.cause == "ceiling"),
         repairs=repairs,
         flags=flags,
         spend=model.spend,
@@ -215,7 +243,7 @@ _UNREPAIRED = "the run reached its spend ceiling before this finding could be re
 
 
 def _resolve(
-    model: ModelClient, drifted: list[tuple[Suspect, Finding]]
+    model: ModelClient, drifted: list[tuple[Suspect, Finding]], threshold: float
 ) -> tuple[tuple[Repair, ...], tuple[Flag, ...]]:
     """Resolve every finding to a repair or a flag.
 
@@ -223,27 +251,63 @@ def _resolve(
     as a flag is worth more than a repair to one finding and silence about the
     rest, so verification is paid for first.
 
-    A ceiling reached at validation throws away edits already paid for. Keeping
-    them would mean proposing, or showing, a rewrite nothing has checked.
+    A finding outside the gate is still repaired and validated, so that the
+    flag can show a reviewer a rewrite to start from; it is never scored,
+    because no score could make it a repair. A ceiling reached at validation
+    or scoring throws away edits already paid for. Keeping them would mean
+    proposing, or showing, a rewrite nothing has checked.
     """
     repairs: list[Repair] = []
     flags: list[Flag] = []
     for position, (suspect, finding) in enumerate(drifted):
         try:
-            outcome = repair(model, suspect.section, suspect.change, finding.explanation)
+            resolved = _settle(model, suspect, finding, threshold)
         except SpendCeilingExceeded:
             flags += [
-                Flag(finding, _UNREPAIRED, suspect.section.text, None)
+                Flag(finding, _UNREPAIRED, suspect.section.text, None, "ceiling")
                 for suspect, finding in drifted[position:]
             ]
             break
-        if isinstance(outcome, Rejected):
-            flags.append(
-                Flag(finding, outcome.reason, suspect.section.text, outcome.attempt)
-            )
+        if isinstance(resolved, Repair):
+            repairs.append(resolved)
         else:
-            repairs.append(Repair(finding, suspect.section.text, outcome))
+            flags.append(resolved)
     return tuple(repairs), tuple(flags)
+
+
+def _settle(
+    model: ModelClient, suspect: Suspect, finding: Finding, threshold: float
+) -> Repair | Flag:
+    """One finding through repair, validation, the gate and the threshold, in that order."""
+    section, change = suspect.section, suspect.change
+    shape = shape_of(change)
+    outcome = repair(model, section, change, finding.explanation)
+    if isinstance(outcome, Rejected):
+        cause: Cause = "unappliable" if outcome.attempt is None else "refused"
+        return Flag(
+            finding,
+            outcome.reason,
+            section.text,
+            outcome.attempt,
+            cause,
+            shape.name if shape else None,
+        )
+    if shape is None:
+        return Flag(finding, outside(change), section.text, outcome, "outside")
+    confidence = rate(model, section, change, finding.explanation, outcome)
+    if confidence < threshold:
+        return Flag(
+            finding,
+            f"the model is {confidence:.0%} confident in this {shape.description} "
+            f"repair, short of the {threshold:.0%} it takes to propose one "
+            "without a human",
+            section.text,
+            outcome,
+            "doubted",
+            shape.name,
+            confidence,
+        )
+    return Repair(finding, section.text, outcome, shape.name, confidence)
 
 
 def _question(suspect: Suspect) -> str:

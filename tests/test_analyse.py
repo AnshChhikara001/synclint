@@ -21,7 +21,9 @@ class ScriptedModel:
     Which question is being asked is read off the answer's schema, the one
     thing about a question that a reworded prompt leaves alone. `edits` is what
     a repair quotes and replaces, and `rejection` is what validation refuses a
-    repair with; empty means it passes.
+    repair with; empty means it passes. `confidence` is the score it gives a
+    repair inside the gate, and `rated` collects every repair it was asked to
+    score.
     """
 
     name = "scripted-model"
@@ -33,6 +35,7 @@ class ScriptedModel:
         *,
         edits: Sequence[tuple[str, str]] = (),
         rejection: str = "",
+        confidence: float = 0.95,
         input_tokens: int = 100,
         output_tokens: int = 20,
         max_output_tokens: int = 500,
@@ -41,6 +44,8 @@ class ScriptedModel:
         self.explanation = explanation
         self.edits = edits
         self.rejection = rejection
+        self.confidence = confidence
+        self.rated: list[str] = []
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
         self.max_output_tokens = max_output_tokens
@@ -56,6 +61,9 @@ class ScriptedModel:
             answer = {"edits": [{"find": f, "replace": r} for f, r in self.edits]}
         elif "valid" in properties:
             answer = {"valid": not self.rejection, "reason": self.rejection}
+        elif "confidence" in properties:
+            self.rated.append(user)
+            answer = {"confidence": self.confidence}
         else:
             self.asked.append(user)
             answer = {"accurate": self.accurate, "explanation": self.explanation}
@@ -198,6 +206,117 @@ def test_a_repair_that_fails_validation_is_flagged_with_the_reason(
     assert flag.attempt is not None and "after five attempts" in flag.attempt
 
 
+def test_a_repair_inside_the_gate_carries_its_shape_and_the_models_confidence(
+    tmp_path: Path,
+) -> None:
+    index = drifted_retries(tmp_path)
+    model = ScriptedModel(
+        accurate=False,
+        explanation="It now gives up after five attempts.",
+        edits=[("after three attempts", "after five attempts"), ("most three", "most five")],
+        confidence=0.95,
+    )
+
+    report = analyse(tmp_path, index, "main~1", "main", client(model))
+
+    (repair,) = report.repairs
+    assert repair.shape == "changed-default"
+    assert repair.confidence == 0.95
+    assert len(model.rated) == 1
+    assert "after five attempts" in model.rated[0]
+
+
+def test_a_repair_the_model_is_not_confident_enough_in_is_flagged_saying_so(
+    tmp_path: Path,
+) -> None:
+    index = drifted_retries(tmp_path)
+    model = ScriptedModel(
+        accurate=False,
+        explanation="It now gives up after five attempts.",
+        edits=[("after three attempts", "after five attempts"), ("most three", "most five")],
+        confidence=0.6,
+    )
+
+    report = analyse(tmp_path, index, "main~1", "main", client(model), threshold=0.9)
+
+    assert report.repairs == ()
+    (flag,) = report.flags
+    assert flag.cause == "doubted"
+    assert flag.shape == "changed-default"
+    assert flag.confidence == 0.6
+    assert "60%" in flag.reason and "90%" in flag.reason
+    assert flag.attempt is not None and "after five attempts" in flag.attempt
+
+
+def test_the_confidence_threshold_is_the_callers_to_set(tmp_path: Path) -> None:
+    index = drifted_retries(tmp_path)
+    model = ScriptedModel(
+        accurate=False,
+        explanation="It now gives up after five attempts.",
+        edits=[("after three attempts", "after five attempts"), ("most three", "most five")],
+        confidence=0.6,
+    )
+
+    report = analyse(tmp_path, index, "main~1", "main", client(model), threshold=0.5)
+
+    assert len(report.repairs) == 1
+    assert report.flags == ()
+
+
+def test_a_change_outside_the_gate_is_flagged_however_confident_the_model_is(
+    tmp_path: Path,
+) -> None:
+    start(tmp_path, {"src/http.py": BASE_SOURCE, "README.md": RETRIES_DOCS})
+    index = build_index(tmp_path)
+    # The default moves and the body changes with it: no longer one narrow shape.
+    commit(
+        tmp_path,
+        {
+            "src/http.py": """
+            def fetch(url, retries=5):
+                return url.strip()
+            """
+        },
+        "raise the retry limit and tidy the url",
+    )
+    model = ScriptedModel(
+        accurate=False,
+        explanation="It now gives up after five attempts.",
+        edits=[("after three attempts", "after five attempts"), ("most three", "most five")],
+        confidence=1.0,
+    )
+
+    report = analyse(tmp_path, index, "main~1", "main", client(model), threshold=0.0)
+
+    assert report.repairs == ()
+    (flag,) = report.flags
+    assert flag.cause == "outside"
+    assert flag.shape is None
+    assert flag.confidence is None
+    assert "parameters and body" in flag.reason
+    # The rewrite is still shown to whoever reads the flag, but the model was
+    # never asked to score it: inside the gate is the only place a score counts.
+    assert flag.attempt is not None
+    assert model.rated == []
+
+
+def test_a_repair_validation_refuses_is_never_scored(tmp_path: Path) -> None:
+    index = drifted_retries(tmp_path)
+    model = ScriptedModel(
+        accurate=False,
+        explanation="It now gives up after five attempts.",
+        edits=[("after three attempts", "after five attempts")],
+        rejection="It still says three requests.",
+    )
+
+    report = analyse(tmp_path, index, "main~1", "main", client(model))
+
+    (flag,) = report.flags
+    assert flag.cause == "refused"
+    assert flag.shape == "changed-default"
+    assert model.rated == []
+
+
 @pytest.mark.parametrize(
     "edits",
     [
@@ -259,6 +378,8 @@ def test_a_repair_reads_as_a_diff_against_the_original_section() -> None:
         finding=Finding("README.md#Fetching", "src/http.py::fetch", "Five now."),
         original="Call `fetch(url)`.\nIt gives up after three attempts.",
         repaired="Call `fetch(url)`.\nIt gives up after five attempts.",
+        shape="changed-default",
+        confidence=0.95,
     )
 
     assert repair.diff == (
@@ -390,6 +511,8 @@ def test_the_command_line_prints_the_findings_and_what_they_cost() -> None:
                 finding=repaired,
                 original="It gives up after three attempts.",
                 repaired="It gives up after five attempts.",
+                shape="changed-default",
+                confidence=0.95,
             ),
         ),
         flags=(
@@ -398,6 +521,7 @@ def test_the_command_line_prints_the_findings_and_what_they_cost() -> None:
                 reason="The repair dropped the note about backoff.",
                 original="`fetch` retries three times, backing off between them.",
                 attempt="`fetch` retries five times.",
+                cause="refused",
             ),
         ),
         spend=Spend(calls=2, input_tokens=1200, output_tokens=140, dollars=0.00148),
@@ -409,6 +533,7 @@ def test_the_command_line_prints_the_findings_and_what_they_cost() -> None:
     assert "README.md#Fetching  (src/http.py::fetch)" in printed
     assert "It now gives up after five attempts, not three." in printed
     assert "    -It gives up after three attempts.\n    +It gives up after five attempts." in printed
+    assert "Proposed: a changed-default, 95% confident." in printed
     assert "Flagged: The repair dropped the note about backoff." in printed
     assert "2 model calls, 1200 tokens in, 140 out, $0.0015 spent." in printed
 
