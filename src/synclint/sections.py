@@ -53,8 +53,8 @@ def split_sections(markdown: str, path: str) -> list[Section]:
     it is real documentation and can drift like any other.
     """
     # TODO: two headings with the same path in one file produce two sections
-    # with the same id. Links to either become ambiguous; needs an occurrence
-    # suffix once `publish` has to point at one of them.
+    # with the same id. Links to either become ambiguous, and `publish` points
+    # at whichever comes first; needs an occurrence suffix.
     sections: list[Section] = []
     headings: list[tuple[int, str]] = []
     body: list[str] = []

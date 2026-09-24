@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import tempfile
 from collections import Counter
@@ -31,6 +32,7 @@ from synclint.index import (
     Index,
     build_index,
 )
+from synclint.github import GitHub
 from synclint.model import (
     DEFAULT_MODEL,
     PRICES,
@@ -38,6 +40,7 @@ from synclint.model import (
     ModelClient,
     OpenAIModel,
 )
+from synclint.publish import publish
 from synclint.score import (
     LinkRecall,
     Linking,
@@ -132,6 +135,21 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     _add_confidence_threshold(analyse_parser)
+    analyse_parser.add_argument(
+        "--pull-request",
+        type=int,
+        dest="pull_request",
+        metavar="NUMBER",
+        help=(
+            "publish the report to this pull request: a summary comment, and a "
+            "pull request of the repairs. Needs GITHUB_TOKEN in the environment"
+        ),
+    )
+    analyse_parser.add_argument(
+        "--repository",
+        default=os.environ.get("GITHUB_REPOSITORY"),
+        help="the repository as owner/name; defaults to GITHUB_REPOSITORY",
+    )
 
     corpus_parser = subcommands.add_parser(
         "corpus", help="audit the fixture corpus against its manifest"
@@ -324,6 +342,9 @@ def _paying_client(arguments: argparse.Namespace, cache: Path) -> ModelClient:
 
 
 def _analyse(arguments: argparse.Namespace) -> None:
+    # Checked before anything is spent: a report that cannot be published has
+    # been paid for and thrown away.
+    github = _github(arguments) if arguments.pull_request is not None else None
     model = _paying_client(arguments, arguments.cache)
     # TODO: #11 decides what to do when the index is missing or older than the
     # base revision. Until then a missing one is rebuilt from the working tree,
@@ -343,8 +364,22 @@ def _analyse(arguments: argparse.Namespace) -> None:
         threshold=arguments.confidence_threshold,
     )
     sys.stdout.write(render(report))
+    if github is not None:
+        comment = publish(
+            report, arguments.root, github, arguments.repository, arguments.pull_request
+        )
+        sys.stdout.write(f"Published to {comment}\n")
     if report.unchecked or report.unrepaired:
         raise SystemExit(1)
+
+
+def _github(arguments: argparse.Namespace) -> GitHub:
+    if not arguments.repository:
+        raise SystemExit("--pull-request needs --repository or GITHUB_REPOSITORY")
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        raise SystemExit("--pull-request needs a token in GITHUB_TOKEN")
+    return GitHub(token)
 
 
 def render(report: Report) -> str:
