@@ -29,6 +29,14 @@ access to GitHub, so every judgement the tool makes is reachable offline.
   model. Comments, formatting and docstring edits do not survive a parse and so
   cannot produce a finding. Sections checked and found accurate are reported too,
   so silence about a section means it was never in question.
+- **Repair and validation** — each finding is rewritten into its section, then
+  a second model pass gates the rewrite. The model answers with quoted spans and
+  their replacements, and synclint applies them itself, so prose outside the
+  quotes is byte-identical by construction. In practice the model quotes the
+  whole section nine times in ten, so that guarantee covers little, and how much
+  a repair left alone is measured instead (below). A quote the section does not
+  contain exactly once, or a rewrite validation refuses, becomes a flag with the
+  reason. Repairs print as a diff against the section.
 - **Spend control** — every model response cached on disk by prompt, a ledger of
   tokens and dollars, and a ceiling checked before each call rather than after.
 - **Fixture corpus** — `corpus/` holds a small library with documentation,
@@ -39,8 +47,7 @@ access to GitHub, so every judgement the tool makes is reachable offline.
   truth. It replays recorded answers and cannot make a call, so the numbers
   below cost nothing to reproduce and do not move between runs.
 
-Not yet built: the repair and validation passes, rules-gated confidence, the
-`publish` step, and the Action itself.
+Not yet built: rules-gated confidence, the `publish` step, and the Action itself.
 
 ## Measured so far
 
@@ -127,7 +134,45 @@ improvement.
 Findings are still scored over name links. The extra suspects have no recorded
 answers yet, so whether the model then finds the shelf case is unmeasured.
 
-106 tests, mypy strict, no API spend in the suite — every test replays a recorded
+### What repairs look like
+
+Every found case is repaired and validated, and the manifest carries ground
+truth for each repair — text a correct one must say and text it must no longer
+say — so validation, itself a model's judgement, is scored against something
+that is not. Recording the 17 repair and validation answers cost **$0.0139**.
+
+| Repaired case | Validation | Ground truth | Text kept |
+| --- | --- | --- | --- |
+| write-json-path-renamed | proposed | correct | 98% |
+| renew-days-default | never reached | not applied | — |
+| write-csv-columns-default | proposed | correct | 94% |
+| matches-case-sensitive-default | proposed | correct | 81% |
+| remove-returns-nothing | never reached | not applied | — |
+| load-drops-create-missing | proposed | correct | 54% |
+| parse-query-drops-or | never reached | not applied | — |
+| overdue-drops-grace | proposed | correct | 49% |
+| titles-drops-sort | proposed | correct | 55% |
+| is-valid-gains-isbn10 | proposed | incorrect | 83% |
+
+**Seven applied, all seven proposed, six of them correct.** Validation refused
+nothing it saw, and the one wrong repair got past it: the `is_valid` repair
+admits ten-digit ISBNs but keeps the advice to convert them first, which the
+change made pointless, and it reflows three lines into one.
+
+Three repairs never reached validation because their quotes did not match the
+section. Two quoted the whole section plus a newline it does not end with, and
+one garbled the quote itself. Text kept is lowest where a capability was
+removed, where the right repair deletes a clause, but it is also low because
+nine of the ten repairs quoted the whole section and rewrote it.
+
+That last point was tested, and the idea failed. Telling the repair pass to
+quote only the wrong words, and refusing a whole-section quote in code, should
+have shrunk the quotes. It did not: seven of ten still quoted everything, the
+guard refused all seven, and one repair in ten came out proposed and correct.
+That cost $0.0114 and is reverted. Commit `68c98d0` keeps its answers, so the
+numbers can be recomputed.
+
+122 tests, mypy strict, no API spend in the suite — every test replays a recorded
 answer or injects a fake.
 
 ## Limitations
@@ -151,6 +196,14 @@ answer or injects a fake.
 - **A chunk the change adds is invisible.** Chunk comparison reports only chunks
   present on both sides of a diff, so a newly added function the documentation
   never mentions goes unreported.
+- **Validation grades the same model's work.** It refused none of the seven
+  repairs it saw, one of them wrong. The ground truth that caught it is hand-written for
+  seventeen sections and does not exist on a real repository.
+- **A repair rewrites the whole section.** The model will not quote small at
+  low reasoning effort, even when told to, so byte-identity outside the edits
+  holds only in name. Text kept measures the damage; nothing bounds it.
+- **Quotes must match exactly.** Three of ten repairs were lost to that, two to
+  a trailing newline.
 - **A pull request from a fork cannot be written to**, so repairs degrade to a
   comment. Deliberate, and stated in the comment rather than failing quietly.
 
