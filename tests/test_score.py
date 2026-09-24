@@ -787,21 +787,35 @@ def test_the_shipped_corpus_scores_what_the_readme_publishes(shipped: Corpus) ->
     repairs = {branch.id: branch.repair for branch in score.branches if branch.repair}
     assert len(repairs) == 10
     proposed = {case for case, repair in repairs.items() if repair.proposed}
+    # Validation passed seven, and the gate held back the four whose change is
+    # neither a renamed parameter nor a changed default. One of those four is
+    # the only incorrect repair validation let through.
     assert proposed == {
         "write-json-path-renamed",
         "write-csv-columns-default",
         "matches-case-sensitive-default",
+    }
+    assert all(repairs[case].correct for case in proposed)
+    outside = {case for case, repair in repairs.items() if repair.cause == "outside"}
+    assert outside == {
         "load-drops-create-missing",
         "overdue-drops-grace",
         "titles-drops-sort",
         "is-valid-gains-isbn10",
     }
-    assert [case for case in proposed if not repairs[case].correct] == [
+    assert [case for case in outside if not repairs[case].correct] == [
         "is-valid-gains-isbn10"
     ]
-    # The three flagged had edits that could not be applied at all.
+    # The model's score fell short for none of them: all three sat at 97% or
+    # 98%, so on this corpus the rules did the work and the threshold none.
     assert all(
-        repair.kept is None for case, repair in repairs.items() if case not in proposed
+        (repairs[case].confidence or 0) >= 0.97 for case in proposed
+    )
+    # The other three had edits that could not be applied at all.
+    assert all(
+        repair.kept is None
+        for case, repair in repairs.items()
+        if case not in proposed | outside
     )
 
 
