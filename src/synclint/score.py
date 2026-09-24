@@ -19,8 +19,8 @@ class RepairOutcome:
     """What became of a planted finding's repair, judged against the manifest.
 
     `cause` is why it was flagged, `None` if it was proposed; `shape` is the
-    gate's name for the change, `None` outside it; and `confidence` the model's
-    score, `None` unless the repair was inside the gate and passed validation.
+    gate's name for the change, `None` outside it; and `confidence` the model's,
+    `None` unless the repair was inside the gate and passed validation.
     `correct` is the ground truth's verdict over the rewrite whether or not it
     was proposed. Where the two disagree is the measurement: a correct repair
     flagged is work thrown away, and an incorrect one proposed is the failure

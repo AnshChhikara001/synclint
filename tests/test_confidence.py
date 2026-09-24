@@ -1,7 +1,7 @@
 from textwrap import dedent
 
 from synclint.changes import ChunkChange, changed_chunks
-from synclint.confidence import SHAPES, outside, shape_of
+from synclint.confidence import SHAPES, outside_reason, shape_of
 
 
 def change(before: str, after: str) -> ChunkChange:
@@ -162,7 +162,7 @@ def test_outside_the_gate_says_what_the_change_touched() -> None:
         "def renew(loan, days=7):\n    return loan - days\n",
     )
 
-    reason = outside(changed)
+    reason = outside_reason(changed)
 
     assert "renamed parameter" in reason and "changed default" in reason
     assert "parameters and body" in reason
@@ -171,4 +171,11 @@ def test_outside_the_gate_says_what_the_change_touched() -> None:
 def test_outside_the_gate_says_when_the_chunk_is_a_class() -> None:
     changed = change("class Shelf:\n    capacity = 50\n", "class Shelf:\n    capacity = 25\n")
 
-    assert "class" in outside(changed)
+    assert "class" in outside_reason(changed)
+
+
+def test_a_change_to_type_parameters_alone_is_outside_the_gate_and_says_so() -> None:
+    changed = change("def first(items):\n    return items[0]\n", "def first[T](items):\n    return items[0]\n")
+
+    assert shape_of(changed) is None
+    assert "type parameters" in outside_reason(changed)

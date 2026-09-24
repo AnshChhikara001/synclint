@@ -578,9 +578,10 @@ def test_the_report_carries_a_calibration_table_for_each_eligible_shape() -> Non
     report = render_score(REPAIRED)
 
     # Every shape the gate admits gets a row, and so does everything outside
-    # it: the comparison is what says whether the gate earns its keep.
-    assert "| Shape | Rewrites | Correct | Proposed at ≥ 90% | Proposed and correct |" in report
-    assert "| renamed-parameter | 3 | 2 (67%) | 2 | 1 |" in report
+    # it: the comparison is what says whether the gate earns its keep. A
+    # repair that could not be applied counts, as one that was not correct.
+    assert "| Shape | Repairs | Correct | Proposed at ≥ 90% | Proposed and correct |" in report
+    assert "| renamed-parameter | 4 | 2 (50%) | 2 | 1 |" in report
     assert "| changed-default | 1 | 1 (100%) | 0 | 0 |" in report
     assert "| outside the gate | 1 | 0 (0%) | 0 | 0 |" in report
 
@@ -989,3 +990,9 @@ def test_the_shipped_corpus_links_what_the_readme_publishes(shipped: Corpus) -> 
         measured.with_embeddings.case_suspects,
         measured.with_embeddings.decoy_suspects,
     ) == (36, 15)
+
+
+@pytest.mark.parametrize("threshold", ["-0.1", "1.5"])
+def test_a_confidence_threshold_outside_nought_to_one_is_refused(threshold: str) -> None:
+    with pytest.raises(SystemExit):
+        main(["score", "corpus", "--confidence-threshold", threshold])

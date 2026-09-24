@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 from synclint.changes import ChunkChange, touched_chunks
-from synclint.confidence import DEFAULT_THRESHOLD, outside, rate, shape_of
+from synclint.confidence import DEFAULT_THRESHOLD, outside_reason, rate, shape_of
 from synclint.index import Index
 from synclint.model import ModelClient, Spend, SpendCeilingExceeded
 from synclint.repair import Rejected, repair
@@ -75,7 +75,7 @@ class Flag:
 
     `attempt` is the rewrite that was refused, where there was one to refuse,
     and `original` the section it would have replaced. `shape` is the gate's
-    name for the change, `None` outside it, and `confidence` the model's score,
+    name for the change, `None` outside it, and `confidence` the model's,
     `None` unless the repair got far enough to be given one.
     """
 
@@ -252,9 +252,9 @@ def _resolve(
     rest, so verification is paid for first.
 
     A finding outside the gate is still repaired and validated, so that the
-    flag can show a reviewer a rewrite to start from; it is never scored,
-    because no score could make it a repair. A ceiling reached at validation
-    or scoring throws away edits already paid for. Keeping them would mean
+    flag can show a reviewer a rewrite to start from. The model is never asked
+    its confidence in it, because no answer could make it a repair. A ceiling
+    reached at validation or at the confidence pass throws away edits already paid for. Keeping them would mean
     proposing, or showing, a rewrite nothing has checked.
     """
     repairs: list[Repair] = []
@@ -264,7 +264,7 @@ def _resolve(
             resolved = _settle(model, suspect, finding, threshold)
         except SpendCeilingExceeded:
             flags += [
-                Flag(finding, _UNREPAIRED, suspect.section.text, None, "ceiling")
+                Flag(finding, _UNREPAIRED, suspect.section.text, None, cause="ceiling")
                 for suspect, finding in drifted[position:]
             ]
             break
@@ -283,29 +283,36 @@ def _settle(
     shape = shape_of(change)
     outcome = repair(model, section, change, finding.explanation)
     if isinstance(outcome, Rejected):
-        cause: Cause = "unappliable" if outcome.attempt is None else "refused"
         return Flag(
-            finding,
-            outcome.reason,
-            section.text,
-            outcome.attempt,
-            cause,
-            shape.name if shape else None,
+            finding=finding,
+            reason=outcome.reason,
+            original=section.text,
+            attempt=outcome.attempt,
+            cause="unappliable" if outcome.attempt is None else "refused",
+            shape=shape.name if shape else None,
         )
     if shape is None:
-        return Flag(finding, outside(change), section.text, outcome, "outside")
+        return Flag(
+            finding=finding,
+            reason=outside_reason(change),
+            original=section.text,
+            attempt=outcome,
+            cause="outside",
+        )
     confidence = rate(model, section, change, finding.explanation, outcome)
     if confidence < threshold:
         return Flag(
-            finding,
-            f"the model is {confidence:.0%} confident in this {shape.description} "
-            f"repair, short of the {threshold:.0%} it takes to propose one "
-            "without a human",
-            section.text,
-            outcome,
-            "doubted",
-            shape.name,
-            confidence,
+            finding=finding,
+            reason=(
+                f"the model is {confidence:.0%} confident in this {shape.description} "
+                f"repair, short of the {threshold:.0%} it takes to propose one "
+                "without a human"
+            ),
+            original=section.text,
+            attempt=outcome,
+            cause="doubted",
+            shape=shape.name,
+            confidence=confidence,
         )
     return Repair(finding, section.text, outcome, shape.name, confidence)
 

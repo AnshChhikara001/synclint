@@ -206,7 +206,7 @@ def _add_threshold(parser: argparse.ArgumentParser) -> None:
 def _add_confidence_threshold(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--confidence-threshold",
-        type=float,
+        type=_proportion,
         default=DEFAULT_THRESHOLD,
         dest="confidence_threshold",
         help=(
@@ -215,6 +215,13 @@ def _add_confidence_threshold(parser: argparse.ArgumentParser) -> None:
             f"{DEFAULT_THRESHOLD}. No value proposes a repair outside the gate"
         ),
     )
+
+
+def _proportion(text: str) -> float:
+    value = float(text)
+    if not 0 <= value <= 1:
+        raise argparse.ArgumentTypeError(f"{text} is not between 0 and 1")
+    return value
 
 
 def _embedding_client(cache: Path) -> EmbeddingClient:
@@ -674,28 +681,25 @@ _OUTCOMES: dict[str | None, str] = {
 def _calibration_lines(score: Score) -> list[str]:
     """How often a repair of each eligible shape was right, and how often it was proposed.
 
-    Counted over every rewrite, proposed or not, because the question the gate
+    Counted over every repair, proposed or not, because the question the gate
     answers is whether a shape is safe to repair at all; the proposed columns
-    are what the threshold then made of it. The row outside the gate is the
-    comparison that says whether the gate is drawn in the right place.
+    are what the threshold then made of it. A repair whose edits could not be
+    applied counts as one that was not correct. The row outside the gate is
+    the comparison that says whether the gate is drawn in the right place.
     """
-    rewrites = [
-        branch.repair
-        for branch in score.branches
-        if branch.repair and branch.repair.kept is not None
-    ]
+    repairs = [branch.repair for branch in score.branches if branch.repair]
     rows = [(shape.name, shape.name) for shape in SHAPES] + [("outside the gate", None)]
     lines = [
-        f"| Shape | Rewrites | Correct | Proposed at ≥ {_rate(score.threshold)} "
+        f"| Shape | Repairs | Correct | Proposed at ≥ {_rate(score.threshold)} "
         "| Proposed and correct |",
         "| --- | --- | --- | --- | --- |",
     ]
     for label, name in rows:
-        these = [repair for repair in rewrites if repair.shape == name]
-        correct = sum(1 for repair in these if repair.correct)
-        proposed = [repair for repair in these if repair.proposed]
+        shaped = [repair for repair in repairs if repair.shape == name]
+        correct = sum(1 for repair in shaped if repair.correct)
+        proposed = [repair for repair in shaped if repair.proposed]
         lines.append(
-            f"| {label} | {len(these)} | {correct} ({_percent(correct, len(these))}) | "
+            f"| {label} | {len(shaped)} | {correct} ({_percent(correct, len(shaped))}) | "
             f"{len(proposed)} | {sum(1 for repair in proposed if repair.correct)} |"
         )
     return lines
