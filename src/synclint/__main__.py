@@ -10,6 +10,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 from synclint.analyse import Report, analyse
+from synclint.confidence import DEFAULT_THRESHOLD, SHAPES
 from synclint.corpus import (
     DECOY_KINDS,
     KINDS,
@@ -130,6 +131,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         help=f"directory of recorded model answers; defaults to {DEFAULT_CACHE}",
     )
 
+    _add_confidence_threshold(analyse_parser)
+
     corpus_parser = subcommands.add_parser(
         "corpus", help="audit the fixture corpus against its manifest"
     )
@@ -162,6 +165,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         help=f"dollars a recording run may spend; defaults to {DEFAULT_CEILING}",
     )
     _add_threshold(score_parser)
+    _add_confidence_threshold(score_parser)
 
     arguments = parser.parse_args(argv)
     if arguments.subcommand == "index":
@@ -195,6 +199,20 @@ def _add_threshold(parser: argparse.ArgumentParser) -> None:
         help=(
             "cosine similarity at or above which a section and a chunk are linked "
             f"by embedding; defaults to {DEFAULT_SIMILARITY_THRESHOLD}"
+        ),
+    )
+
+
+def _add_confidence_threshold(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--confidence-threshold",
+        type=float,
+        default=DEFAULT_THRESHOLD,
+        dest="confidence_threshold",
+        help=(
+            "the model's confidence, from 0 to 1, that a repair inside the gate "
+            "needs before it is proposed; defaults to "
+            f"{DEFAULT_THRESHOLD}. No value proposes a repair outside the gate"
         ),
     )
 
@@ -261,7 +279,7 @@ def _score(arguments: argparse.Namespace) -> None:
         # suspects embedding links add have no recorded answers yet. Recording
         # them is a paid run, and the link table below says whether it is worth
         # paying for before anyone does.
-        score = score_corpus(corpus, model)
+        score = score_corpus(corpus, model, threshold=arguments.confidence_threshold)
         try:
             links: LinkRecall | None = measure_links(corpus, embeddings, arguments.threshold)
         except AnswerNotRecorded:
@@ -309,7 +327,14 @@ def _analyse(arguments: argparse.Namespace) -> None:
         if arguments.index_path
         else build_index(arguments.root, globs)
     )
-    report = analyse(arguments.root, index, arguments.base, arguments.head, model)
+    report = analyse(
+        arguments.root,
+        index,
+        arguments.base,
+        arguments.head,
+        model,
+        threshold=arguments.confidence_threshold,
+    )
     sys.stdout.write(render(report))
     if report.unchecked or report.unrepaired:
         raise SystemExit(1)
@@ -334,7 +359,11 @@ def render(report: Report) -> str:
             "",
         ]
         if finding in repairs:
-            lines += [f"    {line}" for line in repairs[finding].diff.splitlines()]
+            proposed = repairs[finding]
+            lines += [f"    {line}" for line in proposed.diff.splitlines()]
+            lines.append(
+                f"    Proposed: a {proposed.shape}, {proposed.confidence:.0%} confident."
+            )
         else:
             lines.append(f"    Flagged: {flags[finding].reason}")
         lines.append("")
@@ -423,7 +452,7 @@ def render_score(score: Score) -> str:
     if score.false_positives:
         lines += [""] + _false_positive_lines(score)
     if any(branch.repair for branch in score.branches):
-        lines += ["", *_repair_lines(score)]
+        lines += ["", *_repair_lines(score), "", *_calibration_lines(score)]
     lines += [
         "",
         f"{score.spend.calls} model call{_plural(score.spend.calls)}, "
@@ -598,41 +627,78 @@ def _false_positive_lines(score: Score) -> list[str]:
 
 
 def _repair_lines(score: Score) -> list[str]:
-    """Every planted finding's repair, validation's verdict beside the ground truth's.
+    """Every planted finding's repair: what became of it beside the ground truth's verdict.
 
-    The two are set side by side because validation is itself a model's
-    judgement, and the manifest is the only thing here that is not. A flagged
-    repair is judged too: one the ground truth accepts is work validation threw
-    away, and without its row the flags would read as all deserved.
+    Set side by side because validation, and the confidence inside the gate,
+    are both a model's judgement, and the manifest is the only thing here that
+    is not. A flagged repair is judged too: one the ground truth accepts is
+    work thrown away, and without its row the flags would read as all deserved.
     """
     repaired = [(branch.id, branch.repair) for branch in score.branches if branch.repair]
     rows = [
-        f"| {case} | {_validation(repair)} | "
-        f"{_ground_truth(repair)} | {_rate(repair.kept)} |"
+        f"| {case} | {repair.shape or '—'} | {_OUTCOMES[repair.cause]} | "
+        f"{_rate(repair.confidence)} | {_ground_truth(repair)} | {_rate(repair.kept)} |"
         for case, repair in repaired
     ]
     seen = [repair for _, repair in repaired if repair.kept is not None]
-    proposed = [repair for repair in seen if repair.proposed]
-    refused = [repair for repair in seen if not repair.proposed]
+    passed = [repair for repair in seen if repair.cause != "refused"]
+    outside = sum(1 for repair in passed if repair.cause == "outside")
+    doubted = sum(1 for repair in passed if repair.cause == "doubted")
+    proposed = [repair for repair in passed if repair.proposed]
     right = sum(1 for repair in proposed if repair.correct)
-    wasted = sum(1 for repair in refused if repair.correct)
     unapplied = len(repaired) - len(seen)
     return [
-        "| Repaired case | Validation | Ground truth | Text kept |",
-        "| --- | --- | --- | --- |",
+        "| Repaired case | Shape | Outcome | Confidence | Ground truth | Text kept |",
+        "| --- | --- | --- | --- | --- | --- |",
         *rows,
         "",
         f"{len(repaired)} repair{_plural(len(repaired))}, {unapplied} of which "
-        f"could not be applied. Validation proposed {len(proposed)} of the "
-        f"{len(seen)} it saw, {right} of them correct; of the {len(refused)} it "
-        f"refused, {wasted} {'was' if wasted == 1 else 'were'} correct anyway.",
+        f"could not be applied. Validation passed {len(passed)} of the "
+        f"{len(seen)} it saw; of those, {outside} {'was' if outside == 1 else 'were'} "
+        f"outside the gate and {doubted} fell short of the "
+        f"{_rate(score.threshold)} threshold. {len(proposed)} "
+        f"{'was' if len(proposed) == 1 else 'were'} proposed, {right} of them correct.",
     ]
 
 
-def _validation(repair: RepairOutcome) -> str:
-    if repair.kept is None:
-        return "never reached"
-    return "proposed" if repair.proposed else "refused"
+_OUTCOMES: dict[str | None, str] = {
+    None: "proposed",
+    "refused": "refused by validation",
+    "unappliable": "not applied",
+    "outside": "outside the gate",
+    "doubted": "below threshold",
+    "ceiling": "cut off at the ceiling",
+}
+
+
+def _calibration_lines(score: Score) -> list[str]:
+    """How often a repair of each eligible shape was right, and how often it was proposed.
+
+    Counted over every rewrite, proposed or not, because the question the gate
+    answers is whether a shape is safe to repair at all; the proposed columns
+    are what the threshold then made of it. The row outside the gate is the
+    comparison that says whether the gate is drawn in the right place.
+    """
+    rewrites = [
+        branch.repair
+        for branch in score.branches
+        if branch.repair and branch.repair.kept is not None
+    ]
+    rows = [(shape.name, shape.name) for shape in SHAPES] + [("outside the gate", None)]
+    lines = [
+        f"| Shape | Rewrites | Correct | Proposed at ≥ {_rate(score.threshold)} "
+        "| Proposed and correct |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for label, name in rows:
+        these = [repair for repair in rewrites if repair.shape == name]
+        correct = sum(1 for repair in these if repair.correct)
+        proposed = [repair for repair in these if repair.proposed]
+        lines.append(
+            f"| {label} | {len(these)} | {correct} ({_percent(correct, len(these))}) | "
+            f"{len(proposed)} | {sum(1 for repair in proposed if repair.correct)} |"
+        )
+    return lines
 
 
 def _ground_truth(repair: RepairOutcome) -> str:

@@ -109,7 +109,8 @@ class DecidingModel:
 
     Asked for a repair, it makes every edit in `edits` whose quote the section
     contains. Asked to validate one, it rejects the repair when the question
-    names anything in `rejected`.
+    names anything in `rejected`. Asked to score one, it is 95% confident
+    unless the question names anything in `doubted`, when it is 50%.
     """
 
     name = "deciding-model"
@@ -120,10 +121,12 @@ class DecidingModel:
         drifted: Iterable[str] = (),
         edits: Iterable[tuple[str, str]] = (),
         rejected: Iterable[str] = (),
+        doubted: Iterable[str] = (),
     ) -> None:
         self._drifted = tuple(drifted)
         self._edits = tuple(edits)
         self._rejected = tuple(rejected)
+        self._doubted = tuple(doubted)
         self.asked: list[str] = []
 
     def complete(
@@ -143,6 +146,9 @@ class DecidingModel:
         elif "valid" in properties:
             rejected = any(marker in user for marker in self._rejected)
             answer = {"valid": not rejected, "reason": "no" if rejected else ""}
+        elif "confidence" in properties:
+            doubted = any(marker in user for marker in self._doubted)
+            answer = {"confidence": 0.5 if doubted else 0.95}
         else:
             self.asked.append(user)
             drifted = any(marker in user for marker in self._drifted)
@@ -197,6 +203,8 @@ def test_a_repair_the_ground_truth_accepts_and_validation_passes_is_proposed_and
     assert repair is not None
     assert repair.proposed
     assert repair.correct
+    assert repair.shape == "renamed-parameter"
+    assert repair.confidence == 0.95
     # One word of a fifty-two character section rewritten: "query" out.
     assert repair.kept == pytest.approx(47 / 52)
 
@@ -228,7 +236,43 @@ def test_a_correct_repair_validation_rejects_is_flagged_and_still_judged(
 
     assert repair is not None
     assert not repair.proposed
+    assert repair.cause == "refused"
     assert repair.correct
+
+
+def test_a_correct_repair_the_model_doubts_is_flagged_and_still_judged(
+    tmp_path: Path,
+) -> None:
+    model = DecidingModel(
+        drifted=[FIND_SECTION],
+        edits=[("find(query)", "find(text)")],
+        doubted=["find(text)"],
+    )
+    source, asked = one_case(tmp_path, model)
+
+    repair = planted(score_corpus(build_corpus(source, tmp_path / "built"), asked)).repair
+
+    assert repair is not None
+    assert repair.cause == "doubted"
+    assert repair.confidence == 0.5
+    assert repair.correct
+
+
+def test_the_threshold_a_corpus_is_scored_at_is_the_callers_to_set(
+    tmp_path: Path,
+) -> None:
+    model = DecidingModel(
+        drifted=[FIND_SECTION],
+        edits=[("find(query)", "find(text)")],
+        doubted=["find(text)"],
+    )
+    source, asked = one_case(tmp_path, model)
+
+    score = score_corpus(build_corpus(source, tmp_path / "built"), asked, threshold=0.4)
+
+    assert score.threshold == 0.4
+    repair = planted(score).repair
+    assert repair is not None and repair.proposed
 
 
 def test_a_repair_that_could_not_be_applied_is_neither_proposed_nor_correct(
@@ -239,7 +283,13 @@ def test_a_repair_that_could_not_be_applied_is_neither_proposed_nor_correct(
 
     repair = planted(score_corpus(build_corpus(source, tmp_path / "built"), asked)).repair
 
-    assert repair == RepairOutcome(proposed=False, correct=False, kept=None)
+    assert repair == RepairOutcome(
+        shape="renamed-parameter",
+        cause="unappliable",
+        confidence=None,
+        correct=False,
+        kept=None,
+    )
 
 
 def test_a_planted_case_that_was_never_found_has_no_repair_to_score(
@@ -465,34 +515,74 @@ def test_the_report_carries_precision_recall_and_what_it_cost() -> None:
     assert "| decoy/c | docs/a.md#A | a.py::f |" in report
 
 
-def test_the_report_sets_validation_beside_the_ground_truth_for_every_repair() -> None:
-    score = Score(
-        branches=(
-            scored(id="a", repair=RepairOutcome(proposed=True, correct=True, kept=0.9)),
-            scored(id="b", repair=RepairOutcome(proposed=True, correct=False, kept=0.8)),
-            scored(id="c", repair=RepairOutcome(proposed=False, correct=True, kept=0.95)),
-            scored(id="d", repair=RepairOutcome(proposed=False, correct=False, kept=None)),
-            scored(id="e", found=False),
+def outcome(**fields: object) -> RepairOutcome:
+    defaults: dict[str, object] = {
+        "shape": "renamed-parameter",
+        "cause": None,
+        "confidence": 0.95,
+        "correct": True,
+        "kept": 0.9,
+    }
+    return RepairOutcome(**{**defaults, **fields})  # type: ignore[arg-type]
+
+
+REPAIRED = Score(
+    branches=(
+        scored(id="a", repair=outcome()),
+        scored(id="b", repair=outcome(correct=False, kept=0.8)),
+        scored(id="c", repair=outcome(cause="refused", confidence=None, kept=0.95)),
+        scored(
+            id="d",
+            repair=outcome(cause="unappliable", confidence=None, correct=False, kept=None),
         ),
-        unrecorded=(),
-        unfinished=0,
-        spend=Spend(),
-    )
+        scored(
+            id="e",
+            repair=outcome(
+                shape="changed-default", cause="doubted", confidence=0.5, kept=0.7
+            ),
+        ),
+        scored(
+            id="f",
+            kind="removed-capability",
+            repair=outcome(shape=None, cause="outside", confidence=None, correct=False),
+        ),
+        scored(id="g", found=False),
+    ),
+    unrecorded=(),
+    unfinished=0,
+    spend=Spend(),
+    threshold=0.9,
+)
 
-    report = render_score(score)
 
-    assert "| a | proposed | correct | 90% |" in report
-    assert "| b | proposed | incorrect | 80% |" in report
-    assert "| c | refused | correct | 95% |" in report
-    assert "| d | never reached | not applied | — |" in report
-    assert "| e |" not in report
+def test_the_report_sets_every_repairs_outcome_beside_the_ground_truth() -> None:
+    report = render_score(REPAIRED)
+
+    assert "| a | renamed-parameter | proposed | 95% | correct | 90% |" in report
+    assert "| b | renamed-parameter | proposed | 95% | incorrect | 80% |" in report
+    assert "| c | renamed-parameter | refused by validation | — | correct | 95% |" in report
+    assert "| d | renamed-parameter | not applied | — | not applied | — |" in report
+    assert "| e | changed-default | below threshold | 50% | correct | 70% |" in report
+    assert "| f | — | outside the gate | — | incorrect | 90% |" in report
+    assert "| g |" not in report
     # An edit that could not be applied never reached validation, so it is
     # counted apart rather than laid at validation's door.
     assert (
-        "4 repairs, 1 of which could not be applied. Validation proposed 2 of "
-        "the 3 it saw, 1 of them correct; of the 1 it refused, 1 was correct "
-        "anyway." in report
+        "6 repairs, 1 of which could not be applied. Validation passed 4 of the "
+        "5 it saw; of those, 1 was outside the gate and 1 fell short of the 90% "
+        "threshold. 2 were proposed, 1 of them correct." in report
     )
+
+
+def test_the_report_carries_a_calibration_table_for_each_eligible_shape() -> None:
+    report = render_score(REPAIRED)
+
+    # Every shape the gate admits gets a row, and so does everything outside
+    # it: the comparison is what says whether the gate earns its keep.
+    assert "| Shape | Rewrites | Correct | Proposed at ≥ 90% | Proposed and correct |" in report
+    assert "| renamed-parameter | 3 | 2 (67%) | 2 | 1 |" in report
+    assert "| changed-default | 1 | 1 (100%) | 0 | 0 |" in report
+    assert "| outside the gate | 1 | 0 (0%) | 0 | 0 |" in report
 
 
 def test_the_report_refuses_to_print_numbers_from_a_partial_run() -> None:

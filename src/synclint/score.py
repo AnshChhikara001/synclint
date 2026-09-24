@@ -6,7 +6,8 @@ import difflib
 import re
 from dataclasses import dataclass, replace
 
-from synclint.analyse import Finding, Report, analyse, suspects
+from synclint.analyse import Cause, Finding, Report, analyse, suspects
+from synclint.confidence import DEFAULT_THRESHOLD
 from synclint.corpus import BASE_REF, Case, Corpus, case_ref, decoy_ref
 from synclint.embeddings import EmbeddingClient
 from synclint.index import Index, build_index
@@ -17,20 +18,29 @@ from synclint.model import AnswerNotRecorded, ModelClient, Spend
 class RepairOutcome:
     """What became of a planted finding's repair, judged against the manifest.
 
-    `proposed` is validation's verdict and `correct` is the ground truth's,
-    over the rewrite whether or not validation passed it. Where the two
-    disagree is the measurement: a correct repair flagged is work thrown away,
-    and an incorrect one proposed is the failure validation exists to stop.
-    A repair whose edits could not be applied is neither, and has no rewrite.
+    `cause` is why it was flagged, `None` if it was proposed; `shape` is the
+    gate's name for the change, `None` outside it; and `confidence` the model's
+    score, `None` unless the repair was inside the gate and passed validation.
+    `correct` is the ground truth's verdict over the rewrite whether or not it
+    was proposed. Where the two disagree is the measurement: a correct repair
+    flagged is work thrown away, and an incorrect one proposed is the failure
+    validation and the gate exist to stop. A repair whose edits could not be
+    applied has no rewrite, and is never correct.
 
     `kept` is the share of the original section's text, by characters, left
     where it was: counted over whole words, so that a word rewritten counts
     as lost even when it shares a letter with its replacement.
     """
 
-    proposed: bool
+    shape: str | None
+    cause: Cause | None
+    confidence: float | None
     correct: bool
     kept: float | None
+
+    @property
+    def proposed(self) -> bool:
+        return self.cause is None
 
 
 @dataclass(frozen=True)
@@ -66,7 +76,8 @@ class Score:
 
     `unrecorded` names the branches whose answers are not on disk and
     `unfinished` counts the suspects and findings a run stopped short of
-    verifying or repairing at its ceiling.
+    verifying or repairing at its ceiling. `threshold` is the confidence a
+    repair inside the gate needed to be proposed.
     Either one means the numbers below are computed over part of the corpus,
     so a caller that is about to publish them has to refuse.
     """
@@ -75,6 +86,7 @@ class Score:
     unrecorded: tuple[str, ...]
     unfinished: int
     spend: Spend
+    threshold: float = DEFAULT_THRESHOLD
 
     @property
     def true_positives(self) -> int:
@@ -219,7 +231,9 @@ class _Branch:
         return (self.case.section, self.case.chunk) if self.case else None
 
 
-def score_corpus(corpus: Corpus, model: ModelClient) -> Score:
+def score_corpus(
+    corpus: Corpus, model: ModelClient, *, threshold: float = DEFAULT_THRESHOLD
+) -> Score:
     """Run `analyse` over every case and decoy branch and match the findings to ground truth.
 
     One index, built at the base, serves every branch, and one client is shared
@@ -238,7 +252,9 @@ def score_corpus(corpus: Corpus, model: ModelClient) -> Score:
 
     for branch in _branches(corpus):
         try:
-            report = analyse(corpus.root, index, BASE_REF, branch.ref, model)
+            report = analyse(
+                corpus.root, index, BASE_REF, branch.ref, model, threshold=threshold
+            )
         except AnswerNotRecorded:
             unrecorded.append(branch.id)
             continue
@@ -265,6 +281,7 @@ def score_corpus(corpus: Corpus, model: ModelClient) -> Score:
         unrecorded=tuple(unrecorded),
         unfinished=unfinished,
         spend=model.spend,
+        threshold=threshold,
     )
 
 
@@ -272,16 +289,27 @@ def _repair_score(report: Report, case: Case) -> RepairOutcome | None:
     planted = (case.section, case.chunk)
     for repair in report.repairs:
         if (repair.finding.section, repair.finding.chunk) == planted:
-            return _judged(case, True, repair.original, repair.repaired)
+            return _judged(
+                case, repair.original, repair.repaired, repair.shape, None, repair.confidence
+            )
     for flag in report.flags:
         if (flag.finding.section, flag.finding.chunk) == planted:
             if flag.attempt is None:
-                return RepairOutcome(proposed=False, correct=False, kept=None)
-            return _judged(case, False, flag.original, flag.attempt)
+                return RepairOutcome(flag.shape, flag.cause, None, correct=False, kept=None)
+            return _judged(
+                case, flag.original, flag.attempt, flag.shape, flag.cause, flag.confidence
+            )
     return None
 
 
-def _judged(case: Case, proposed: bool, original: str, repaired: str) -> RepairOutcome:
+def _judged(
+    case: Case,
+    original: str,
+    repaired: str,
+    shape: str | None,
+    cause: Cause | None,
+    confidence: float | None,
+) -> RepairOutcome:
     # Words rather than lines: a section is a paragraph or two, and one word
     # changed in a wrapped line would otherwise count the whole line lost.
     was, now = _WORDS.findall(original), _WORDS.findall(repaired)
@@ -292,7 +320,9 @@ def _judged(case: Case, proposed: bool, original: str, repaired: str) -> RepairO
         for token in was[block.a : block.a + block.size]
     )
     return RepairOutcome(
-        proposed=proposed,
+        shape=shape,
+        cause=cause,
+        confidence=confidence,
         correct=case.accepts(repaired),
         kept=kept / len(original),
     )
