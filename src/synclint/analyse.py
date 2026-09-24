@@ -50,16 +50,21 @@ class Repair:
     @property
     def diff(self) -> str:
         """The repair as a unified diff against the section it rewrites."""
-        # A section is stripped of its trailing newline, and without one the
-        # last line of each side runs into the next line of the diff.
-        return "".join(
-            difflib.unified_diff(
-                (self.original + "\n").splitlines(keepends=True),
-                (self.repaired + "\n").splitlines(keepends=True),
-                fromfile=self.finding.section,
-                tofile=self.finding.section,
-            )
+        return section_diff(self.finding.section, self.original, self.repaired)
+
+
+def section_diff(section: str, original: str, rewritten: str) -> str:
+    """A rewrite of `section` as a unified diff against its original text."""
+    # A section is stripped of its trailing newline, and without one the last
+    # line of each side runs into the next line of the diff.
+    return "".join(
+        difflib.unified_diff(
+            (original + "\n").splitlines(keepends=True),
+            (rewritten + "\n").splitlines(keepends=True),
+            fromfile=section,
+            tofile=section,
         )
+    )
 
 
 # Why a finding was flagged rather than repaired. The repair's edits could not
