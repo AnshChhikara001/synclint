@@ -2,13 +2,35 @@
 
 from __future__ import annotations
 
+import difflib
+import re
 from dataclasses import dataclass, replace
 
-from synclint.analyse import Finding, analyse, suspects
-from synclint.corpus import BASE_REF, Corpus, case_ref, decoy_ref
+from synclint.analyse import Finding, Report, analyse, suspects
+from synclint.corpus import BASE_REF, Case, Corpus, case_ref, decoy_ref
 from synclint.embeddings import EmbeddingClient
 from synclint.index import Index, build_index
 from synclint.model import AnswerNotRecorded, ModelClient, Spend
+
+
+@dataclass(frozen=True)
+class RepairOutcome:
+    """What became of a planted finding's repair, judged against the manifest.
+
+    `proposed` is validation's verdict and `correct` is the ground truth's,
+    over the rewrite whether or not validation passed it. Where the two
+    disagree is the measurement: a correct repair flagged is work thrown away,
+    and an incorrect one proposed is the failure validation exists to stop.
+    A repair whose edits could not be applied is neither, and has no rewrite.
+
+    `kept` is the share of the original section's text, by characters, left
+    where it was: counted over whole words, so that a word rewritten counts
+    as lost even when it shares a letter with its replacement.
+    """
+
+    proposed: bool
+    correct: bool
+    kept: float | None
 
 
 @dataclass(frozen=True)
@@ -24,6 +46,9 @@ class Scored:
     the branch raised no suspect, so no answer of any kind could have produced
     a finding — the distinction between what the design rules out and what the
     model's judgement earned.
+
+    `repair` scores the planted finding's repair, and is `None` wherever the
+    planted finding was not found.
     """
 
     id: str
@@ -32,6 +57,7 @@ class Scored:
     verified: int
     found: bool
     spurious: tuple[Finding, ...]
+    repair: RepairOutcome | None
 
 
 @dataclass(frozen=True)
@@ -39,7 +65,8 @@ class Score:
     """What one run of the whole corpus measured.
 
     `unrecorded` names the branches whose answers are not on disk and
-    `unfinished` counts the suspects a run stopped short of at its ceiling.
+    `unfinished` counts the suspects and findings a run stopped short of
+    verifying or repairing at its ceiling.
     Either one means the numbers below are computed over part of the corpus,
     so a caller that is about to publish them has to refuse.
     """
@@ -174,8 +201,9 @@ def _linking(corpus: Corpus, index: Index) -> Linking:
 class _Branch:
     """One branch to run, and the finding it owes.
 
-    `planted` is the section and chunk a case is expected to invalidate, and is
-    `None` for a decoy, which owes nothing. Carrying the difference as data
+    `case` is the ground truth a case branch is held to, and `planted` the
+    section and chunk it is expected to invalidate; both are `None` for a
+    decoy, which owes nothing. Carrying the difference as data
     rather than as two loops is what lets a decoy be scored by the same rule as
     a case: no finding matches what was never planted.
     """
@@ -184,7 +212,11 @@ class _Branch:
     kind: str
     decoy: bool
     ref: str
-    planted: tuple[str, str] | None
+    case: Case | None
+
+    @property
+    def planted(self) -> tuple[str, str] | None:
+        return (self.case.section, self.case.chunk) if self.case else None
 
 
 def score_corpus(corpus: Corpus, model: ModelClient) -> Score:
@@ -210,7 +242,7 @@ def score_corpus(corpus: Corpus, model: ModelClient) -> Score:
         except AnswerNotRecorded:
             unrecorded.append(branch.id)
             continue
-        unfinished += report.unchecked
+        unfinished += report.unchecked + report.unrepaired
         reported = {(finding.section, finding.chunk) for finding in report.findings}
         scored.append(
             Scored(
@@ -224,6 +256,7 @@ def score_corpus(corpus: Corpus, model: ModelClient) -> Score:
                     for finding in report.findings
                     if (finding.section, finding.chunk) != branch.planted
                 ),
+                repair=_repair_score(report, branch.case) if branch.case else None,
             )
         )
 
@@ -235,6 +268,41 @@ def score_corpus(corpus: Corpus, model: ModelClient) -> Score:
     )
 
 
+def _repair_score(report: Report, case: Case) -> RepairOutcome | None:
+    planted = (case.section, case.chunk)
+    for repair in report.repairs:
+        if (repair.finding.section, repair.finding.chunk) == planted:
+            return _judged(case, True, repair.original, repair.repaired)
+    for flag in report.flags:
+        if (flag.finding.section, flag.finding.chunk) == planted:
+            if flag.attempt is None:
+                return RepairOutcome(proposed=False, correct=False, kept=None)
+            return _judged(case, False, flag.original, flag.attempt)
+    return None
+
+
+def _judged(case: Case, proposed: bool, original: str, repaired: str) -> RepairOutcome:
+    # Words rather than lines: a section is a paragraph or two, and one word
+    # changed in a wrapped line would otherwise count the whole line lost.
+    was, now = _WORDS.findall(original), _WORDS.findall(repaired)
+    matcher = difflib.SequenceMatcher(None, was, now, autojunk=False)
+    kept = sum(
+        len(token)
+        for block in matcher.get_matching_blocks()
+        for token in was[block.a : block.a + block.size]
+    )
+    return RepairOutcome(
+        proposed=proposed,
+        correct=case.accepts(repaired),
+        kept=kept / len(original),
+    )
+
+
+# A word, a run of whitespace, or one punctuation mark. Together they tile the
+# text, so the lengths of the tokens kept sum to the characters kept.
+_WORDS = re.compile(r"\w+|\s+|[^\w\s]")
+
+
 def _branches(corpus: Corpus) -> list[_Branch]:
     """Every branch to run, cases first, in the order the manifest writes them down."""
     return [
@@ -243,7 +311,7 @@ def _branches(corpus: Corpus) -> list[_Branch]:
             kind=case.kind,
             decoy=False,
             ref=case_ref(case.id),
-            planted=(case.section, case.chunk),
+            case=case,
         )
         for case in corpus.cases
     ] + [
@@ -252,7 +320,7 @@ def _branches(corpus: Corpus) -> list[_Branch]:
             kind=decoy.kind,
             decoy=True,
             ref=decoy_ref(decoy.id),
-            planted=None,
+            case=None,
         )
         for decoy in corpus.decoys
     ]

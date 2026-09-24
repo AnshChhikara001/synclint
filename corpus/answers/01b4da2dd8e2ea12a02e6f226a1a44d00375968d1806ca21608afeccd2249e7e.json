@@ -1,0 +1,8 @@
+{
+  "model": "gpt-5.4-mini",
+  "system": "You repair documentation that a code change has made inaccurate.\n\nYou are given one section of a project's documentation, the chunk of code it\ndescribes as it read before a change and as it reads after, and what the change\nhas made wrong. Rewrite only the words that are now wrong. Everything the\nsection says that is still true stays exactly as it is.\n\nAnswer with edits. Each edit quotes a span of the section exactly as it is\nwritten, line breaks included, and gives the text to put in its place. Quote as\nlittle as makes the span appear only once in the section. Write replacements in\nthe section's own voice: its tense, its person, and how it writes numbers and\ncode. Add no headings, lists or examples the section did not already have.",
+  "user": "Documentation section docs/loans.md#Loans > Overdue loans:\n\n`overdue(loans, today)` returns the loans past their due date. Pass `grace_days`\nto ignore the ones that are only a little late.\n\nThe chunk bookshelf/loans.py::overdue before the change:\n\ndef overdue(loans, today, grace_days=0):\n    return [loan for loan in loans if (today - loan.due).days > grace_days]\n\nAnd after it:\n\ndef overdue(loans, today):\n    return [loan for loan in loans if today > loan.due]\n\nWhat the change made wrong: `overdue` no longer accepts `grace_days`, so the documentation\u2019s claim that you can pass it to ignore slightly late loans is now wrong.",
+  "text": "{\"edits\":[{\"find\":\"Pass `grace_days`\\nto ignore the ones that are only a little late.\",\"replace\":\"\"}]}",
+  "input_tokens": 396,
+  "output_tokens": 113
+}

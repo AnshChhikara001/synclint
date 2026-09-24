@@ -9,6 +9,13 @@
 # Kinds: renamed-parameter, changed-default, removed-capability,
 # contradicted-claim. Five of each of the first three; two of the last, for the
 # reason corpus/README.md gives under "What drift is not".
+#
+# `repair_says` and `repair_drops` are what a correct repair of the section
+# contains and no longer contains, matched exactly. They are written in each
+# page's own voice, so a repair that gets the fact right but writes "7" where the
+# page writes "seven" is judged incorrect: matching the voice is part of the
+# job. Where a case removes a capability, `repair_says` names something the
+# section got right that a repair must not lose along with it.
 
 [[case]]
 id = "find-query-renamed"
@@ -16,6 +23,8 @@ kind = "renamed-parameter"
 section = "docs/catalogue.md#Catalogue > Finding books"
 chunk = "bookshelf/catalogue.py::Catalogue.find"
 description = "find's query parameter is now called text"
+repair_says = ["find(text)"]
+repair_drops = ["find(query)"]
 
 [[case]]
 id = "read-csv-path-renamed"
@@ -23,6 +32,8 @@ kind = "renamed-parameter"
 section = "docs/importing.md#Importing > Reading a CSV"
 chunk = "bookshelf/importer.py::read_csv"
 description = "read_csv takes source rather than path"
+repair_says = ["read_csv(source)"]
+repair_drops = ["read_csv(path)"]
 
 [[case]]
 id = "lend-borrower-renamed"
@@ -30,6 +41,8 @@ kind = "renamed-parameter"
 section = "docs/loans.md#Loans > Lending a book"
 chunk = "bookshelf/loans.py::lend"
 description = "lend takes reader rather than borrower"
+repair_says = ["lend(book, reader)"]
+repair_drops = ["lend(book, borrower)"]
 
 [[case]]
 id = "normalise-raw-renamed"
@@ -37,6 +50,8 @@ kind = "renamed-parameter"
 section = "docs/isbn.md#ISBNs > Normalising"
 chunk = "bookshelf/isbn.py::normalise"
 description = "normalise takes text rather than raw"
+repair_says = ["normalise(text)"]
+repair_drops = ["normalise(raw)"]
 
 [[case]]
 id = "write-json-path-renamed"
@@ -44,6 +59,8 @@ kind = "renamed-parameter"
 section = "docs/exporting.md#Exporting > JSON"
 chunk = "bookshelf/exporter.py::write_json"
 description = "write_json takes destination rather than path"
+repair_says = ["write_json(books, destination)"]
+repair_drops = ["write_json(books, path)"]
 
 [[case]]
 id = "renew-days-default"
@@ -51,6 +68,8 @@ kind = "changed-default"
 section = "docs/loans.md#Loans > Renewing"
 chunk = "bookshelf/loans.py::renew"
 description = "a renewal now runs seven days, not fourteen"
+repair_says = ["seven days"]
+repair_drops = ["fourteen"]
 
 [[case]]
 id = "write-csv-columns-default"
@@ -58,6 +77,8 @@ kind = "changed-default"
 section = "docs/exporting.md#Exporting > CSV"
 chunk = "bookshelf/exporter.py::write_csv"
 description = "write_csv writes a year column as well by default"
+repair_says = ["year"]
+repair_drops = ["Three columns"]
 
 [[case]]
 id = "shelf-capacity-default"
@@ -65,6 +86,8 @@ kind = "changed-default"
 section = "docs/shelves.md#Shelves > Capacity"
 chunk = "bookshelf/shelves.py::Shelf.__init__"
 description = "a shelf holds twenty-five books by default, not fifty"
+repair_says = ["twenty-five"]
+repair_drops = ["holds fifty"]
 
 [[case]]
 id = "matches-case-sensitive-default"
@@ -72,6 +95,8 @@ kind = "changed-default"
 section = "docs/searching.md#Searching > Matching"
 chunk = "bookshelf/search.py::matches"
 description = "matching is case sensitive by default now"
+repair_says = ["case_sensitive=False"]
+repair_drops = ["case_sensitive=True", "ignores case, so"]
 
 [[case]]
 id = "read-csv-skip-invalid-default"
@@ -79,6 +104,8 @@ kind = "changed-default"
 section = "docs/importing.md#Importing > Invalid rows"
 chunk = "bookshelf/importer.py::read_csv"
 description = "read_csv raises on an invalid row by default rather than skipping it"
+repair_says = ["skip_invalid=True"]
+repair_drops = ["skip_invalid=False", "is skipped."]
 
 [[case]]
 id = "remove-returns-nothing"
@@ -86,6 +113,8 @@ kind = "removed-capability"
 section = "docs/catalogue.md#Catalogue > Removing books"
 chunk = "bookshelf/catalogue.py::Catalogue.remove"
 description = "remove no longer returns the book it dropped"
+repair_says = ["KeyError"]
+repair_drops = ["returns the `Book`", "straight onto a shelf"]
 
 [[case]]
 id = "load-drops-create-missing"
@@ -93,6 +122,8 @@ kind = "removed-capability"
 section = "docs/storage.md#Storage > Loading"
 chunk = "bookshelf/storage.py::load"
 description = "load no longer takes create_missing; a missing file always raises"
+repair_says = ["FileNotFoundError"]
+repair_drops = ["create_missing"]
 
 [[case]]
 id = "parse-query-drops-or"
@@ -100,6 +131,8 @@ kind = "removed-capability"
 section = "docs/searching.md#Searching > Query syntax"
 chunk = "bookshelf/search.py::parse_query"
 description = "OR alternatives are gone; every term is required"
+repair_says = ["substring matching"]
+repair_drops = ["either-or", "and alternatives"]
 
 [[case]]
 id = "overdue-drops-grace"
@@ -107,6 +140,8 @@ kind = "removed-capability"
 section = "docs/loans.md#Loans > Overdue loans"
 chunk = "bookshelf/loans.py::overdue"
 description = "overdue no longer takes grace_days"
+repair_says = ["overdue(loans, today)"]
+repair_drops = ["grace_days"]
 
 [[case]]
 id = "titles-drops-sort"
@@ -114,6 +149,8 @@ kind = "removed-capability"
 section = "docs/shelves.md#Shelves > Listing titles"
 chunk = "bookshelf/shelves.py::Shelf.titles"
 description = "titles no longer takes sort; it is always alphabetical"
+repair_says = ["alphabetically"]
+repair_drops = ["sort=False"]
 
 [[case]]
 id = "is-valid-gains-isbn10"
@@ -121,6 +158,8 @@ kind = "contradicted-claim"
 section = "docs/isbn.md#ISBNs > Validating"
 chunk = "bookshelf/isbn.py::is_valid"
 description = "ten-digit ISBNs validate now, where the page says they never do"
+repair_says = ["ten-digit"]
+repair_drops = ["always rejected", "convert older ISBNs"]
 
 [[case]]
 id = "catalogue-gains-merge"
@@ -128,6 +167,8 @@ kind = "contradicted-claim"
 section = "docs/catalogue.md#Catalogue"
 chunk = "bookshelf/catalogue.py::Catalogue.merge"
 description = "the catalogue gained merge and entries, where the page says everything it can do is listed"
+repair_says = ["merg"]
+repair_drops = []
 
 # Decoys: changes that must produce no finding, so that a precision figure has
 # negative cases to be computed over. A decoy carries no section and no chunk

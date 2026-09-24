@@ -1,5 +1,7 @@
 import json
 from collections import Counter
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from textwrap import dedent
 
@@ -55,9 +57,9 @@ def write_corpus(
     source: Path,
     base: dict[str, str],
     cases: dict[str, dict[str, str]],
-    manifest: list[dict[str, str]],
+    manifest: Sequence[Mapping[str, object]],
     decoys: dict[str, dict[str, str]] | None = None,
-    decoy_manifest: list[dict[str, str]] | None = None,
+    decoy_manifest: Sequence[Mapping[str, object]] | None = None,
 ) -> None:
     write(source / "base", base)
     for case_id, overlay in cases.items():
@@ -69,8 +71,11 @@ def write_corpus(
     (source / "manifest.toml").write_text("\n".join(entries))
 
 
-def _table(name: str, entry: dict[str, str]) -> str:
-    fields = "".join(f'{field} = "{value}"\n' for field, value in sorted(entry.items()))
+def _table(name: str, entry: Mapping[str, object]) -> str:
+    # A JSON string or list of strings is also a TOML one.
+    fields = "".join(
+        f"{field} = {json.dumps(value)}\n" for field, value in sorted(entry.items())
+    )
     return f"[[{name}]]\n{fields}"
 
 
@@ -80,7 +85,19 @@ FIND_QUERY_RENAMED = {
     "section": "docs/catalogue.md#Catalogue > Finding books",
     "chunk": "catalogue.py::find",
     "description": "find's query parameter is now called text",
+    "repair_says": ["find(text)"],
+    "repair_drops": ["find(query)"],
 }
+
+FIND_CASE = Case(
+    id="find-query-renamed",
+    kind="renamed-parameter",
+    section="docs/catalogue.md#Catalogue > Finding books",
+    chunk="catalogue.py::find",
+    description="find's query parameter is now called text",
+    repair_says=("find(text)",),
+    repair_drops=("find(query)",),
+)
 
 
 def test_each_case_becomes_its_own_commit_off_the_base(tmp_path: Path) -> None:
@@ -176,6 +193,8 @@ SHELF_CAPACITY_DEFAULT = {
     "section": "docs/shelves.md#Shelves > Capacity",
     "chunk": "shelves.py::Shelf.__init__",
     "description": "a shelf now holds twenty-five books by default, not fifty",
+    "repair_says": ["twenty-five"],
+    "repair_drops": ["fifty"],
 }
 
 
@@ -245,6 +264,25 @@ def test_a_manifest_pointing_at_what_is_not_there_is_a_fault(tmp_path: Path) -> 
     )
 
 
+def test_repair_ground_truth_the_unrepaired_section_already_meets_is_a_fault(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "corpus"
+    write_corpus(
+        source,
+        base={"catalogue.py": CATALOGUE, "docs/catalogue.md": DOCS},
+        cases={"find-query-renamed": {"catalogue.py": RENAMED}},
+        manifest=[FIND_QUERY_RENAMED | {"repair_says": [], "repair_drops": ["find(text)"]}],
+    )
+
+    audit = audit_corpus(build_corpus(source, tmp_path / "built"))
+
+    assert audit.faults == (
+        "find-query-renamed: the section as it stands already meets its repair "
+        "ground truth, so a repair that changed nothing would be judged correct",
+    )
+
+
 def test_an_unknown_kind_and_an_unclaimed_overlay_are_faults(tmp_path: Path) -> None:
     source = tmp_path / "corpus"
     write_corpus(
@@ -269,7 +307,7 @@ def test_an_unknown_kind_and_an_unclaimed_overlay_are_faults(tmp_path: Path) -> 
 def test_the_command_line_prints_the_shape_the_reach_and_the_faults() -> None:
     printed = render_audit(
         Audit(
-            cases=(Case(**FIND_QUERY_RENAMED), Case(**SHELF_CAPACITY_DEFAULT)),
+            cases=(FIND_CASE, replace(FIND_CASE, id="shelf-capacity-default", kind="changed-default")),
             decoys=(),
             faults=("half-written: an overlay with no case in the manifest",),
             reachable=("find-query-renamed",),
@@ -288,7 +326,7 @@ def test_the_command_line_prints_the_shape_the_reach_and_the_faults() -> None:
 def test_the_command_line_says_so_when_the_corpus_is_sound() -> None:
     printed = render_audit(
         Audit(
-            cases=(Case(**FIND_QUERY_RENAMED),),
+            cases=(FIND_CASE,),
             decoys=(),
             faults=(),
             reachable=("find-query-renamed",),
@@ -539,7 +577,7 @@ def test_an_unknown_decoy_kind_and_an_unclaimed_decoy_overlay_are_faults(
 def test_the_command_line_prints_the_decoys_and_what_reaches_the_model() -> None:
     printed = render_audit(
         Audit(
-            cases=(Case(**FIND_QUERY_RENAMED),),
+            cases=(FIND_CASE,),
             decoys=(Decoy(**FIND_BODY_REFACTORED), Decoy(**FIND_REFLOWED_DECOY)),
             faults=(),
             reachable=("find-query-renamed",),
@@ -556,7 +594,7 @@ def test_the_command_line_prints_the_decoys_and_what_reaches_the_model() -> None
 def test_the_command_line_says_when_no_decoy_reaches_the_model() -> None:
     printed = render_audit(
         Audit(
-            cases=(Case(**FIND_QUERY_RENAMED),),
+            cases=(FIND_CASE,),
             decoys=(Decoy(**FIND_REFLOWED_DECOY),),
             faults=(),
             reachable=("find-query-renamed",),
@@ -652,7 +690,7 @@ class DriftedModel:
     Deliberately not `ScriptedModel` from the analyse tests: this one exists to
     take the model's judgement out of the picture entirely — measuring that is
     #6's job — and leave only the path from a planted case to a finding the
-    manifest can be compared against.
+    manifest can be compared against. Asked for a repair, it proposes none.
     """
 
     name = "drifted-model"
@@ -661,8 +699,15 @@ class DriftedModel:
     def complete(
         self, system: str, user: str, schema: dict[str, object]
     ) -> ModelResponse:
+        properties = schema["properties"]
+        assert isinstance(properties, dict)
+        answer = (
+            {"edits": []}
+            if "edits" in properties
+            else {"accurate": False, "explanation": "it changed"}
+        )
         return ModelResponse(
-            text=json.dumps({"accurate": False, "explanation": "it changed"}),
+            text=json.dumps(answer),
             input_tokens=1,
             output_tokens=1,
         )

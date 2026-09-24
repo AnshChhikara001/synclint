@@ -1,0 +1,8 @@
+{
+  "model": "gpt-5.4-mini",
+  "system": "You check a proposed repair to a section of documentation before anyone reads it.\n\nYou are given the section as it stands, the chunk of code it describes as it\nread before a change and as it reads after, what the change made wrong, and the\nsection as the repair would leave it. Pass the repair only if all three hold:\nit describes the code as it reads after the change; everything the section said\nthat is still true survives it; and it reads as though the section's own author\nwrote it.\n\nIf you reject it, say in one sentence why. If you pass it, leave the reason\nempty.",
+  "user": "Documentation section docs/loans.md#Loans > Overdue loans:\n\n`overdue(loans, today)` returns the loans past their due date. Pass `grace_days`\nto ignore the ones that are only a little late.\n\nThe chunk bookshelf/loans.py::overdue before the change:\n\ndef overdue(loans, today, grace_days=0):\n    return [loan for loan in loans if (today - loan.due).days > grace_days]\n\nAnd after it:\n\ndef overdue(loans, today):\n    return [loan for loan in loans if today > loan.due]\n\nWhat the change made wrong: `overdue` no longer accepts `grace_days`, so the documentation\u2019s claim that you can pass it to ignore slightly late loans is now wrong.\n\nThe section as the repair would leave it:\n\n`overdue(loans, today)` returns the loans past their due date. ",
+  "text": "{\"valid\":true,\"reason\":\"\"}",
+  "input_tokens": 379,
+  "output_tokens": 76
+}

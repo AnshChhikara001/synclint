@@ -94,7 +94,8 @@ only on a fault in the corpus itself.
 
 Measurement and fault are kept apart deliberately. A fault means the corpus is
 wrong: a case that changes nothing, edits documentation, names a section or a
-chunk that is not there, or names a chunk its own commit does not change; or a
+chunk that is not there, names a chunk its own commit does not change, or
+gives repair ground truth the unrepaired section already meets; or a
 decoy whose commit is not the kind of change the manifest calls it. Anything
 with a fault is not measured at all, so *unreachable* means one thing only —
 drift correctly recorded that synclint cannot yet get to.
@@ -126,6 +127,15 @@ is stricter than measuring false positives on the decoys alone, and deliberately
 so: the manifest says what each case should invalidate, and a tool that reports
 three sections to get one right is not precise. It can only push the number
 down, never up.
+
+Every finding is also repaired and the repair validated, and each case carries
+ground truth for its repair: `repair_says`, text a correct repair of the section
+contains, and `repair_drops`, text it no longer does. Both are matched exactly,
+in the page's own voice. The score sets validation's verdict on each planted
+repair beside the ground truth's, flagged repairs included, because validation
+is a model judging a model and the manifest is the only thing here that is not.
+The audit refuses a case whose section, unrepaired, already meets its ground
+truth: a repair that changed nothing would be scored correct.
 
     embeddings/       one recorded vector per section and chunk the base indexes
 

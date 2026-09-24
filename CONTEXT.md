@@ -44,12 +44,16 @@ _Avoid_: issue, error, problem, violation
 A rewritten section that resolves a finding while preserving the parts that were already accurate.
 _Avoid_: fix, correction, patch, update
 
+**Validation**:
+The model pass that gates a repair: does it describe the code as it now reads, keep what was already right, and read as the section's author wrote it. A gate on the repair, not a second opinion on the finding — a repair that fails it becomes a flag, and the finding stands.
+_Avoid_: verification, review, check
+
 **Confidence**:
 How certain the system is that a repair is safe to propose without a human reading the original first. Decides whether a finding becomes a repair or a flag.
 _Avoid_: score, certainty, probability
 
 **Flag**:
-A finding surfaced for human review instead of repaired, because confidence was too low.
+A finding surfaced for human review instead of repaired: because validation refused the repair, because the repair could not be applied, or because the run hit its spend ceiling first. Low confidence will be a fourth reason once confidence exists.
 _Avoid_: warning, alert, notice
 
 **Corpus**:

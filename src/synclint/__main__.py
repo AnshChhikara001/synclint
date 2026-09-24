@@ -37,7 +37,15 @@ from synclint.model import (
     ModelClient,
     OpenAIModel,
 )
-from synclint.score import LinkRecall, Linking, Score, Scored, measure_links, score_corpus
+from synclint.score import (
+    LinkRecall,
+    Linking,
+    RepairOutcome,
+    Score,
+    Scored,
+    measure_links,
+    score_corpus,
+)
 
 # A run checks a handful of sections, which at the default model costs cents.
 # The ceiling is here for the run that is not typical — a pull request touching
@@ -303,7 +311,7 @@ def _analyse(arguments: argparse.Namespace) -> None:
     )
     report = analyse(arguments.root, index, arguments.base, arguments.head, model)
     sys.stdout.write(render(report))
-    if report.unchecked:
+    if report.unchecked or report.unrepaired:
         raise SystemExit(1)
 
 
@@ -317,16 +325,29 @@ def render(report: Report) -> str:
         f"{drifted} {'has' if drifted == 1 else 'have'} drifted.",
         "",
     ]
+    repairs = {repair.finding: repair for repair in report.repairs}
+    flags = {flag.finding: flag for flag in report.flags}
     for finding in report.findings:
         lines += [
             f"{finding.section}  ({finding.chunk})",
             f"    {finding.explanation}",
             "",
         ]
+        if finding in repairs:
+            lines += [f"    {line}" for line in repairs[finding].diff.splitlines()]
+        else:
+            lines.append(f"    Flagged: {flags[finding].reason}")
+        lines.append("")
     if report.unchecked:
         lines += [
             f"Stopped at the spend ceiling with {report.unchecked} "
             f"suspect{_plural(report.unchecked)} unverified. Raise --ceiling to go on.",
+            "",
+        ]
+    elif report.unrepaired:
+        lines += [
+            f"Stopped at the spend ceiling with {report.unrepaired} "
+            f"finding{_plural(report.unrepaired)} unrepaired. Raise --ceiling to go on.",
             "",
         ]
     spend = report.spend
@@ -401,6 +422,8 @@ def render_score(score: Score) -> str:
         lines += ["", *_decoy_kind_lines(score), "", _decoy_line(score)]
     if score.false_positives:
         lines += [""] + _false_positive_lines(score)
+    if any(branch.repair for branch in score.branches):
+        lines += ["", *_repair_lines(score)]
     lines += [
         "",
         f"{score.spend.calls} model call{_plural(score.spend.calls)}, "
@@ -464,8 +487,8 @@ def _gap_lines(score: Score) -> list[str]:
     if score.unfinished:
         reasons.append(
             [
-                f"{score.unfinished} suspect{_plural(score.unfinished)} were left "
-                "unverified at the spend ceiling. Raise --ceiling to go on."
+                f"{score.unfinished} suspects or findings were left unverified "
+                "or unrepaired at the spend ceiling. Raise --ceiling to go on."
             ]
         )
     lines = ["The corpus was not scored in full, so there are no numbers."]
@@ -572,6 +595,50 @@ def _false_positive_lines(score: Score) -> list[str]:
             for finding in branch.spurious
         ]
     return lines
+
+
+def _repair_lines(score: Score) -> list[str]:
+    """Every planted finding's repair, validation's verdict beside the ground truth's.
+
+    The two are set side by side because validation is itself a model's
+    judgement, and the manifest is the only thing here that is not. A flagged
+    repair is judged too: one the ground truth accepts is work validation threw
+    away, and without its row the flags would read as all deserved.
+    """
+    repaired = [(branch.id, branch.repair) for branch in score.branches if branch.repair]
+    rows = [
+        f"| {case} | {_validation(repair)} | "
+        f"{_ground_truth(repair)} | {_rate(repair.kept)} |"
+        for case, repair in repaired
+    ]
+    seen = [repair for _, repair in repaired if repair.kept is not None]
+    proposed = [repair for repair in seen if repair.proposed]
+    refused = [repair for repair in seen if not repair.proposed]
+    right = sum(1 for repair in proposed if repair.correct)
+    wasted = sum(1 for repair in refused if repair.correct)
+    unapplied = len(repaired) - len(seen)
+    return [
+        "| Repaired case | Validation | Ground truth | Text kept |",
+        "| --- | --- | --- | --- |",
+        *rows,
+        "",
+        f"{len(repaired)} repair{_plural(len(repaired))}, {unapplied} of which "
+        f"could not be applied. Validation proposed {len(proposed)} of the "
+        f"{len(seen)} it saw, {right} of them correct; of the {len(refused)} it "
+        f"refused, {wasted} {'was' if wasted == 1 else 'were'} correct anyway.",
+    ]
+
+
+def _validation(repair: RepairOutcome) -> str:
+    if repair.kept is None:
+        return "never reached"
+    return "proposed" if repair.proposed else "refused"
+
+
+def _ground_truth(repair: RepairOutcome) -> str:
+    if repair.kept is None:
+        return "not applied"
+    return "correct" if repair.correct else "incorrect"
 
 
 def _rate(rate: float | None) -> str:

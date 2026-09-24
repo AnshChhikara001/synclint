@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,6 +10,7 @@ from pathlib import Path
 from synclint.changes import ChunkChange, touched_chunks
 from synclint.index import Index
 from synclint.model import ModelClient, Spend, SpendCeilingExceeded
+from synclint.repair import Rejected, repair
 from synclint.sections import Section
 
 
@@ -30,6 +32,43 @@ class Finding:
 
 
 @dataclass(frozen=True)
+class Repair:
+    """A finding resolved to a rewritten section that passed validation."""
+
+    finding: Finding
+    original: str
+    repaired: str
+
+    @property
+    def diff(self) -> str:
+        """The repair as a unified diff against the section it rewrites."""
+        # A section is stripped of its trailing newline, and without one the
+        # last line of each side runs into the next line of the diff.
+        return "".join(
+            difflib.unified_diff(
+                (self.original + "\n").splitlines(keepends=True),
+                (self.repaired + "\n").splitlines(keepends=True),
+                fromfile=self.finding.section,
+                tofile=self.finding.section,
+            )
+        )
+
+
+@dataclass(frozen=True)
+class Flag:
+    """A finding surfaced for a human rather than repaired, and why.
+
+    `attempt` is the rewrite that was refused, where there was one to refuse,
+    and `original` the section it would have replaced.
+    """
+
+    finding: Finding
+    reason: str
+    original: str
+    attempt: str | None
+
+
+@dataclass(frozen=True)
 class Report:
     """What one run of `analyse` concluded.
 
@@ -38,11 +77,18 @@ class Report:
     ceiling. A section can be a suspect twice over, against two changed chunks,
     so a section can appear in `verified` while a suspect naming it went
     unchecked. Without that count a truncated report would read like a clean one.
+
+    Every finding resolves to exactly one repair or one flag. `unrepaired`
+    counts the flags that are there only because the run reached its ceiling
+    first, so that a caller can tell them from the flags validation earned.
     """
 
     findings: tuple[Finding, ...]
     verified: tuple[str, ...]
     unchecked: int
+    unrepaired: int
+    repairs: tuple[Repair, ...]
+    flags: tuple[Flag, ...]
     spend: Spend
 
 
@@ -98,13 +144,16 @@ def analyse(
     and found accurate are reported too, so that silence about a section means
     it was never a suspect rather than that it passed.
 
+    Each finding is then repaired, and the repair validated; one that fails
+    validation becomes a flag instead.
+
     A run that reaches its spend ceiling returns what it has rather than
     raising: the findings are already paid for, and the report says how many
     suspects it never got to.
     """
     pending = suspects(root, index, base, head)
 
-    findings: list[Finding] = []
+    drifted: list[tuple[Suspect, Finding]] = []
     verified: list[str] = []
     unchecked = 0
     for position, suspect in enumerate(pending):
@@ -115,12 +164,16 @@ def analyse(
             break
         verified.append(suspect.section.id)
         if finding is not None:
-            findings.append(finding)
+            drifted.append((suspect, finding))
 
+    repairs, flags = _resolve(model, drifted)
     return Report(
-        findings=tuple(findings),
+        findings=tuple(finding for _, finding in drifted),
         verified=tuple(dict.fromkeys(verified)),
         unchecked=unchecked,
+        unrepaired=sum(1 for flag in flags if flag.reason == _UNREPAIRED),
+        repairs=repairs,
+        flags=flags,
         spend=model.spend,
     )
 
@@ -156,6 +209,41 @@ def _verify(model: ModelClient, suspect: Suspect) -> Finding | None:
         chunk=suspect.change.chunk,
         explanation=answer["explanation"],
     )
+
+
+_UNREPAIRED = "the run reached its spend ceiling before this finding could be repaired"
+
+
+def _resolve(
+    model: ModelClient, drifted: list[tuple[Suspect, Finding]]
+) -> tuple[tuple[Repair, ...], tuple[Flag, ...]]:
+    """Resolve every finding to a repair or a flag.
+
+    Only after every suspect is verified. Under a ceiling, a finding reported
+    as a flag is worth more than a repair to one finding and silence about the
+    rest, so verification is paid for first.
+
+    A ceiling reached at validation throws away edits already paid for. Keeping
+    them would mean proposing, or showing, a rewrite nothing has checked.
+    """
+    repairs: list[Repair] = []
+    flags: list[Flag] = []
+    for position, (suspect, finding) in enumerate(drifted):
+        try:
+            outcome = repair(model, suspect.section, suspect.change, finding.explanation)
+        except SpendCeilingExceeded:
+            flags += [
+                Flag(finding, _UNREPAIRED, suspect.section.text, None)
+                for suspect, finding in drifted[position:]
+            ]
+            break
+        if isinstance(outcome, Rejected):
+            flags.append(
+                Flag(finding, outcome.reason, suspect.section.text, outcome.attempt)
+            )
+        else:
+            repairs.append(Repair(finding, suspect.section.text, outcome))
+    return tuple(repairs), tuple(flags)
 
 
 def _question(suspect: Suspect) -> str:

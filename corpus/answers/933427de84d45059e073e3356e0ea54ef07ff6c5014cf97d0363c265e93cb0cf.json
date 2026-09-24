@@ -1,0 +1,8 @@
+{
+  "model": "gpt-5.4-mini",
+  "system": "You check a proposed repair to a section of documentation before anyone reads it.\n\nYou are given the section as it stands, the chunk of code it describes as it\nread before a change and as it reads after, what the change made wrong, and the\nsection as the repair would leave it. Pass the repair only if all three hold:\nit describes the code as it reads after the change; everything the section said\nthat is still true survives it; and it reads as though the section's own author\nwrote it.\n\nIf you reject it, say in one sentence why. If you pass it, leave the reason\nempty.",
+  "user": "Documentation section docs/shelves.md#Shelves > Listing titles:\n\n`Shelf.titles()` returns the titles on the shelf, sorted alphabetically. Pass\n`sort=False` to get them in the order they were added.\n\nThe chunk bookshelf/shelves.py::Shelf.titles before the change:\n\ndef titles(self, sort=True):\n    found = [book.title for book in self._books]\n    return sorted(found) if sort else found\n\nAnd after it:\n\ndef titles(self):\n    return sorted((book.title for book in self._books))\n\nWhat the change made wrong: `Shelf.titles()` no longer accepts a `sort=False` argument, so the documented way to get insertion order is now wrong.\n\nThe section as the repair would leave it:\n\n`Shelf.titles()` returns the titles on the shelf, sorted alphabetically.",
+  "text": "{\"valid\":true,\"reason\":\"\"}",
+  "input_tokens": 364,
+  "output_tokens": 64
+}

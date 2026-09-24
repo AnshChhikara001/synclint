@@ -1,5 +1,6 @@
 import json
 import subprocess
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 from textwrap import dedent
@@ -7,15 +8,21 @@ from textwrap import dedent
 import pytest
 
 from synclint.__main__ import render
-from synclint.analyse import Finding, Report, analyse, suspects
-from synclint.index import build_index
+from synclint.analyse import Finding, Flag, Repair, Report, analyse, suspects
+from synclint.index import Index, build_index
 from synclint.model import ModelClient, ModelResponse, Pricing, Spend
 
 PRICING = Pricing(input=1.00, output=2.00)
 
 
 class ScriptedModel:
-    """Answers the verification question the way a test needs it answered."""
+    """Answers each question the way a test needs it answered.
+
+    Which question is being asked is read off the answer's schema, the one
+    thing about a question that a reworded prompt leaves alone. `edits` is what
+    a repair quotes and replaces, and `rejection` is what validation refuses a
+    repair with; empty means it passes.
+    """
 
     name = "scripted-model"
 
@@ -24,12 +31,16 @@ class ScriptedModel:
         accurate: bool,
         explanation: str = "",
         *,
+        edits: Sequence[tuple[str, str]] = (),
+        rejection: str = "",
         input_tokens: int = 100,
         output_tokens: int = 20,
         max_output_tokens: int = 500,
     ) -> None:
         self.accurate = accurate
         self.explanation = explanation
+        self.edits = edits
+        self.rejection = rejection
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
         self.max_output_tokens = max_output_tokens
@@ -38,11 +49,18 @@ class ScriptedModel:
     def complete(
         self, system: str, user: str, schema: dict[str, object]
     ) -> ModelResponse:
-        self.asked.append(user)
+        properties = schema["properties"]
+        assert isinstance(properties, dict)
+        answer: dict[str, object]
+        if "edits" in properties:
+            answer = {"edits": [{"find": f, "replace": r} for f, r in self.edits]}
+        elif "valid" in properties:
+            answer = {"valid": not self.rejection, "reason": self.rejection}
+        else:
+            self.asked.append(user)
+            answer = {"accurate": self.accurate, "explanation": self.explanation}
         return ModelResponse(
-            text=json.dumps(
-                {"accurate": self.accurate, "explanation": self.explanation}
-            ),
+            text=json.dumps(answer),
             input_tokens=self.input_tokens,
             output_tokens=self.output_tokens,
         )
@@ -124,6 +142,133 @@ def test_a_section_the_model_finds_accurate_is_checked_but_not_reported(
 
     assert report.findings == ()
     assert report.verified == ("README.md#Fetching",)
+
+
+RETRIES_DOCS = """
+    # Fetching
+
+    Call `fetch(url)` to download a page. It gives up after three attempts,
+    so a flaky server costs you at most three requests.
+    """
+
+
+def drifted_retries(tmp_path: Path) -> Index:
+    start(tmp_path, {"src/http.py": BASE_SOURCE, "README.md": RETRIES_DOCS})
+    index = build_index(tmp_path)
+    commit(tmp_path, {"src/http.py": DRIFTED_SOURCE}, "raise the retry limit")
+    return index
+
+
+def test_a_finding_is_repaired_by_rewriting_only_what_drifted(tmp_path: Path) -> None:
+    index = drifted_retries(tmp_path)
+    model = ScriptedModel(
+        accurate=False,
+        explanation="It now gives up after five attempts.",
+        edits=[("after three attempts", "after five attempts"), ("most three", "most five")],
+    )
+
+    report = analyse(tmp_path, index, "main~1", "main", client(model))
+
+    (repair,) = report.repairs
+    assert repair.finding == report.findings[0]
+    assert repair.repaired == (
+        "Call `fetch(url)` to download a page. It gives up after five attempts,\n"
+        "so a flaky server costs you at most five requests."
+    )
+    assert report.flags == ()
+
+
+def test_a_repair_that_fails_validation_is_flagged_with_the_reason(
+    tmp_path: Path,
+) -> None:
+    index = drifted_retries(tmp_path)
+    model = ScriptedModel(
+        accurate=False,
+        explanation="It now gives up after five attempts.",
+        edits=[("after three attempts", "after five attempts")],
+        rejection="It still says a flaky server costs three requests.",
+    )
+
+    report = analyse(tmp_path, index, "main~1", "main", client(model))
+
+    assert report.repairs == ()
+    (flag,) = report.flags
+    assert flag.finding == report.findings[0]
+    assert flag.reason == "It still says a flaky server costs three requests."
+    assert flag.attempt is not None and "after five attempts" in flag.attempt
+
+
+@pytest.mark.parametrize(
+    "edits",
+    [
+        [("after four attempts", "after five attempts")],
+        [("three", "five")],
+        [("after three attempts", "after five"), ("three attempts,", "five,")],
+        [("three attempts", "three attempts")],
+        [],
+    ],
+    ids=["not-in-section", "ambiguous", "overlapping", "no-change", "no-edits"],
+)
+def test_a_repair_that_cannot_be_applied_is_flagged_rather_than_guessed_at(
+    tmp_path: Path, edits: list[tuple[str, str]]
+) -> None:
+    index = drifted_retries(tmp_path)
+    model = ScriptedModel(accurate=False, explanation="Five now.", edits=edits)
+
+    report = analyse(tmp_path, index, "main~1", "main", client(model))
+
+    assert report.repairs == ()
+    (flag,) = report.flags
+    assert flag.finding == report.findings[0]
+    assert flag.attempt is None
+
+
+def test_a_run_that_hits_its_ceiling_while_repairing_flags_what_it_could_not_repair(
+    tmp_path: Path,
+) -> None:
+    index = drifted_retries(tmp_path)
+    model = ScriptedModel(
+        accurate=False,
+        explanation="It now gives up after five.",
+        edits=[("after three attempts", "after five attempts")],
+        input_tokens=100_000,
+        output_tokens=10_000,
+        max_output_tokens=10_000,
+    )
+    # The same arithmetic as the verification ceiling test: one $0.12 call
+    # fits under $0.13, and the repair that would follow it does not.
+    report = analyse(
+        tmp_path,
+        index,
+        "main~1",
+        "main",
+        ModelClient(model, pricing=PRICING, ceiling=0.13),
+    )
+
+    assert len(report.findings) == 1
+    assert report.unchecked == 0
+    assert report.unrepaired == 1
+    assert report.repairs == ()
+    (flag,) = report.flags
+    assert "spend ceiling" in flag.reason
+    assert "1 finding unrepaired" in render(report)
+
+
+def test_a_repair_reads_as_a_diff_against_the_original_section() -> None:
+    repair = Repair(
+        finding=Finding("README.md#Fetching", "src/http.py::fetch", "Five now."),
+        original="Call `fetch(url)`.\nIt gives up after three attempts.",
+        repaired="Call `fetch(url)`.\nIt gives up after five attempts.",
+    )
+
+    assert repair.diff == (
+        "--- README.md#Fetching\n"
+        "+++ README.md#Fetching\n"
+        "@@ -1,2 +1,2 @@\n"
+        " Call `fetch(url)`.\n"
+        "-It gives up after three attempts.\n"
+        "+It gives up after five attempts.\n"
+    )
 
 
 def test_reformatting_and_comment_edits_produce_no_suspects(tmp_path: Path) -> None:
@@ -225,29 +370,61 @@ def test_reports_what_the_run_consumed(tmp_path: Path) -> None:
 
 
 def test_the_command_line_prints_the_findings_and_what_they_cost() -> None:
+    repaired = Finding(
+        section="README.md#Fetching",
+        chunk="src/http.py::fetch",
+        explanation="It now gives up after five attempts, not three.",
+    )
+    flagged = Finding(
+        section="docs/guide.md#Retries",
+        chunk="src/http.py::fetch",
+        explanation="It retries five times, not three.",
+    )
     report = Report(
-        findings=(
-            Finding(
-                section="README.md#Fetching",
-                chunk="src/http.py::fetch",
-                explanation="It now gives up after five attempts, not three.",
-            ),
-        ),
+        findings=(repaired, flagged),
         verified=("README.md#Fetching", "docs/guide.md#Retries"),
         unchecked=0,
+        unrepaired=0,
+        repairs=(
+            Repair(
+                finding=repaired,
+                original="It gives up after three attempts.",
+                repaired="It gives up after five attempts.",
+            ),
+        ),
+        flags=(
+            Flag(
+                finding=flagged,
+                reason="The repair dropped the note about backoff.",
+                original="`fetch` retries three times, backing off between them.",
+                attempt="`fetch` retries five times.",
+            ),
+        ),
         spend=Spend(calls=2, input_tokens=1200, output_tokens=140, dollars=0.00148),
     )
 
     printed = render(report)
 
-    assert "Verified 2 sections; 1 has drifted." in printed
+    assert "Verified 2 sections; 2 have drifted." in printed
     assert "README.md#Fetching  (src/http.py::fetch)" in printed
     assert "It now gives up after five attempts, not three." in printed
+    assert "    -It gives up after three attempts.\n    +It gives up after five attempts." in printed
+    assert "Flagged: The repair dropped the note about backoff." in printed
     assert "2 model calls, 1200 tokens in, 140 out, $0.0015 spent." in printed
 
 
 def test_the_command_line_says_so_when_nothing_drifted() -> None:
-    printed = render(Report(findings=(), verified=("README.md#Fetching",), unchecked=0, spend=Spend()))
+    printed = render(
+        Report(
+            findings=(),
+            verified=("README.md#Fetching",),
+            unchecked=0,
+            unrepaired=0,
+            repairs=(),
+            flags=(),
+            spend=Spend(),
+        )
+    )
 
     assert "Verified 1 section; 0 have drifted." in printed
 

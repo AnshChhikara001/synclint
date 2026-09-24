@@ -1,5 +1,5 @@
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from textwrap import dedent
 
@@ -14,6 +14,7 @@ from synclint.model import DEFAULT_MODEL, ModelClient, ModelResponse, Pricing, S
 from synclint.score import (
     LinkRecall,
     Linking,
+    RepairOutcome,
     Score,
     Scored,
     measure_links,
@@ -55,6 +56,8 @@ FIND_QUERY_RENAMED = {
     "section": FIND_SECTION,
     "chunk": FIND_CHUNK,
     "description": "find's query parameter is now called text",
+    "repair_says": ["find(text)"],
+    "repair_drops": ["find(query)"],
 }
 
 FIND_REFACTORED = {
@@ -75,9 +78,9 @@ def write_corpus(
     source: Path,
     base: dict[str, str],
     cases: dict[str, dict[str, str]],
-    manifest: list[dict[str, str]],
+    manifest: Sequence[Mapping[str, object]],
     decoys: dict[str, dict[str, str]] | None = None,
-    decoy_manifest: list[dict[str, str]] | None = None,
+    decoy_manifest: Sequence[Mapping[str, object]] | None = None,
 ) -> None:
     write(source / "base", base)
     for case_id, overlay in cases.items():
@@ -89,8 +92,11 @@ def write_corpus(
     (source / "manifest.toml").write_text("\n".join(entries))
 
 
-def _table(name: str, entry: dict[str, str]) -> str:
-    fields = "".join(f'{field} = "{value}"\n' for field, value in sorted(entry.items()))
+def _table(name: str, entry: Mapping[str, object]) -> str:
+    # A JSON string or list of strings is also a TOML one.
+    fields = "".join(
+        f"{field} = {json.dumps(value)}\n" for field, value in sorted(entry.items())
+    )
     return f"[[{name}]]\n{fields}"
 
 
@@ -100,30 +106,51 @@ class DecidingModel:
     A marker is any text the prompt carries — a section id, a chunk id, an
     identifier out of the code — so a test can fail one suspect and clear the
     others without knowing the order they are asked in.
+
+    Asked for a repair, it makes every edit in `edits` whose quote the section
+    contains. Asked to validate one, it rejects the repair when the question
+    names anything in `rejected`.
     """
 
     name = "deciding-model"
     max_output_tokens = 500
 
-    def __init__(self, drifted: Iterable[str] = ()) -> None:
+    def __init__(
+        self,
+        drifted: Iterable[str] = (),
+        edits: Iterable[tuple[str, str]] = (),
+        rejected: Iterable[str] = (),
+    ) -> None:
         self._drifted = tuple(drifted)
+        self._edits = tuple(edits)
+        self._rejected = tuple(rejected)
         self.asked: list[str] = []
 
     def complete(
         self, system: str, user: str, schema: dict[str, object]
     ) -> ModelResponse:
-        self.asked.append(user)
-        drifted = any(marker in user for marker in self._drifted)
-        return ModelResponse(
-            text=json.dumps(
-                {
-                    "accurate": not drifted,
-                    "explanation": "the parameter is called something else" if drifted else "",
-                }
-            ),
-            input_tokens=10,
-            output_tokens=5,
-        )
+        properties = schema["properties"]
+        assert isinstance(properties, dict)
+        answer: dict[str, object]
+        if "edits" in properties:
+            answer = {
+                "edits": [
+                    {"find": find, "replace": replace}
+                    for find, replace in self._edits
+                    if find in user
+                ]
+            }
+        elif "valid" in properties:
+            rejected = any(marker in user for marker in self._rejected)
+            answer = {"valid": not rejected, "reason": "no" if rejected else ""}
+        else:
+            self.asked.append(user)
+            drifted = any(marker in user for marker in self._drifted)
+            answer = {
+                "accurate": not drifted,
+                "explanation": "the parameter is called something else" if drifted else "",
+            }
+        return ModelResponse(text=json.dumps(answer), input_tokens=10, output_tokens=5)
 
 
 def client(model: DecidingModel, cache: Path | None = None) -> ModelClient:
@@ -152,6 +179,75 @@ def test_a_planted_case_the_model_reports_is_a_true_positive(tmp_path: Path) -> 
     assert score.false_positives == 0
     assert score.recall == 1.0
     assert score.precision == 1.0
+
+
+def planted(score: Score) -> Scored:
+    (branch,) = [branch for branch in score.branches if not branch.decoy]
+    return branch
+
+
+def test_a_repair_the_ground_truth_accepts_and_validation_passes_is_proposed_and_correct(
+    tmp_path: Path,
+) -> None:
+    model = DecidingModel(drifted=[FIND_SECTION], edits=[("find(query)", "find(text)")])
+    source, asked = one_case(tmp_path, model)
+
+    repair = planted(score_corpus(build_corpus(source, tmp_path / "built"), asked)).repair
+
+    assert repair is not None
+    assert repair.proposed
+    assert repair.correct
+    # One word of a fifty-two character section rewritten: "query" out.
+    assert repair.kept == pytest.approx(47 / 52)
+
+
+def test_a_repair_that_misses_the_drift_is_incorrect_even_when_validation_passes_it(
+    tmp_path: Path,
+) -> None:
+    model = DecidingModel(drifted=[FIND_SECTION], edits=[("twenty", "thirty")])
+    source, asked = one_case(tmp_path, model)
+
+    repair = planted(score_corpus(build_corpus(source, tmp_path / "built"), asked)).repair
+
+    assert repair is not None
+    assert repair.proposed
+    assert not repair.correct
+
+
+def test_a_correct_repair_validation_rejects_is_flagged_and_still_judged(
+    tmp_path: Path,
+) -> None:
+    model = DecidingModel(
+        drifted=[FIND_SECTION],
+        edits=[("find(query)", "find(text)")],
+        rejected=["find(text)"],
+    )
+    source, asked = one_case(tmp_path, model)
+
+    repair = planted(score_corpus(build_corpus(source, tmp_path / "built"), asked)).repair
+
+    assert repair is not None
+    assert not repair.proposed
+    assert repair.correct
+
+
+def test_a_repair_that_could_not_be_applied_is_neither_proposed_nor_correct(
+    tmp_path: Path,
+) -> None:
+    model = DecidingModel(drifted=[FIND_SECTION])
+    source, asked = one_case(tmp_path, model)
+
+    repair = planted(score_corpus(build_corpus(source, tmp_path / "built"), asked)).repair
+
+    assert repair == RepairOutcome(proposed=False, correct=False, kept=None)
+
+
+def test_a_planted_case_that_was_never_found_has_no_repair_to_score(
+    tmp_path: Path,
+) -> None:
+    source, asked = one_case(tmp_path, DecidingModel())
+
+    assert planted(score_corpus(build_corpus(source, tmp_path / "built"), asked)).repair is None
 
 
 def test_a_planted_case_the_model_clears_is_a_false_negative(tmp_path: Path) -> None:
@@ -317,6 +413,7 @@ def scored(**fields: object) -> Scored:
         "verified": 1,
         "found": True,
         "spurious": (),
+        "repair": None,
     }
     return Scored(**{**defaults, **fields})  # type: ignore[arg-type]
 
@@ -366,6 +463,36 @@ def test_the_report_carries_precision_recall_and_what_it_cost() -> None:
     assert "Recall 50% (1 true positive, 1 false negative)" in report
     assert "$0.0000" in report
     assert "| decoy/c | docs/a.md#A | a.py::f |" in report
+
+
+def test_the_report_sets_validation_beside_the_ground_truth_for_every_repair() -> None:
+    score = Score(
+        branches=(
+            scored(id="a", repair=RepairOutcome(proposed=True, correct=True, kept=0.9)),
+            scored(id="b", repair=RepairOutcome(proposed=True, correct=False, kept=0.8)),
+            scored(id="c", repair=RepairOutcome(proposed=False, correct=True, kept=0.95)),
+            scored(id="d", repair=RepairOutcome(proposed=False, correct=False, kept=None)),
+            scored(id="e", found=False),
+        ),
+        unrecorded=(),
+        unfinished=0,
+        spend=Spend(),
+    )
+
+    report = render_score(score)
+
+    assert "| a | proposed | correct | 90% |" in report
+    assert "| b | proposed | incorrect | 80% |" in report
+    assert "| c | refused | correct | 95% |" in report
+    assert "| d | never reached | not applied | — |" in report
+    assert "| e |" not in report
+    # An edit that could not be applied never reached validation, so it is
+    # counted apart rather than laid at validation's door.
+    assert (
+        "4 repairs, 1 of which could not be applied. Validation proposed 2 of "
+        "the 3 it saw, 1 of them correct; of the 1 it refused, 1 was correct "
+        "anyway." in report
+    )
 
 
 def test_the_report_refuses_to_print_numbers_from_a_partial_run() -> None:
@@ -567,6 +694,26 @@ def test_the_shipped_corpus_scores_what_the_readme_publishes(shipped: Corpus) ->
     assert len(reached) == 7
     assert all(result.spurious == () for result in reached)
 
+    repairs = {branch.id: branch.repair for branch in score.branches if branch.repair}
+    assert len(repairs) == 10
+    proposed = {case for case, repair in repairs.items() if repair.proposed}
+    assert proposed == {
+        "write-json-path-renamed",
+        "write-csv-columns-default",
+        "matches-case-sensitive-default",
+        "load-drops-create-missing",
+        "overdue-drops-grace",
+        "titles-drops-sort",
+        "is-valid-gains-isbn10",
+    }
+    assert [case for case in proposed if not repairs[case].correct] == [
+        "is-valid-gains-isbn10"
+    ]
+    # The three flagged had edits that could not be applied at all.
+    assert all(
+        repair.kept is None for case, repair in repairs.items() if case not in proposed
+    )
+
 
 class TopicEmbedder:
     """Places a text on one axis per topic word it contains.
@@ -610,6 +757,8 @@ SHELF_CAPACITY_DEFAULT = {
     "section": SHELF_SECTION,
     "chunk": "shelves.py::Shelf.__init__",
     "description": "a shelf holds forty books by default",
+    "repair_says": ["forty"],
+    "repair_drops": ["fifty"],
 }
 
 

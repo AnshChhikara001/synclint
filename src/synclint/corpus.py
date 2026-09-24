@@ -58,6 +58,11 @@ class Case:
 
     Ground truth, written by hand and independent of what synclint can currently
     detect. A case nothing reaches is a gap in the tool, not an error in the case.
+
+    `repair_says` and `repair_drops` are the ground truth for a repair of the
+    section: text it must contain, and text it must no longer contain. Matched
+    exactly, case and all, so each is written in the section's own voice — a
+    page that writes "fourteen days" is not correctly repaired to "7 days".
     """
 
     id: str
@@ -65,6 +70,14 @@ class Case:
     section: str
     chunk: str
     description: str
+    repair_says: tuple[str, ...]
+    repair_drops: tuple[str, ...]
+
+    def accepts(self, repaired: str) -> bool:
+        """Whether a repaired section says what the change made true, and no longer what it made false."""
+        return all(text in repaired for text in self.repair_says) and not any(
+            text in repaired for text in self.repair_drops
+        )
 
 
 @dataclass(frozen=True)
@@ -317,8 +330,14 @@ def _faults(corpus: Corpus, case: Case, index: Index) -> list[str]:
             "a planted case changes code and leaves the prose stale"
         )
     faults.extend(_chunk_faults(corpus.root, case))
-    if case.section not in {section.id for section in index.sections}:
+    sections = {section.id: section for section in index.sections}
+    if case.section not in sections:
         faults.append(f"{case.id}: the base index has no section {case.section}")
+    elif case.accepts(sections[case.section].text):
+        faults.append(
+            f"{case.id}: the section as it stands already meets its repair "
+            "ground truth, so a repair that changed nothing would be judged correct"
+        )
     return faults
 
 
@@ -389,14 +408,27 @@ def read_manifest(path: Path) -> Manifest:
 
 
 def _case(entry: dict[str, object]) -> Case:
-    _require(entry, {"id", "kind", "section", "chunk", "description"}, "case")
+    _require(
+        entry,
+        {"id", "kind", "section", "chunk", "description", "repair_says", "repair_drops"},
+        "case",
+    )
     return Case(
         id=str(entry["id"]),
         kind=str(entry["kind"]),
         section=str(entry["section"]),
         chunk=str(entry["chunk"]),
         description=str(entry["description"]),
+        repair_says=_strings(entry, "repair_says"),
+        repair_drops=_strings(entry, "repair_drops"),
     )
+
+
+def _strings(entry: dict[str, object], field: str) -> tuple[str, ...]:
+    value = entry[field]
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise CorpusError(f"case {entry['id']}: {field} is not a list of strings")
+    return tuple(value)
 
 
 def _decoy(entry: dict[str, object]) -> Decoy:
