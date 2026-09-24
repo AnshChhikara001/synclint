@@ -49,11 +49,19 @@ The model pass that gates a repair: does it describe the code as it now reads, k
 _Avoid_: verification, review, check
 
 **Confidence**:
-How certain the system is that a repair is safe to propose without a human reading the original first. Decides whether a finding becomes a repair or a flag.
+How certain the system is that a repair is safe to propose without a human reading the original first. Decides whether a finding becomes a repair or a flag. Two parts, in order: the gate, which is rules, and inside it only, the model's own estimate held to a threshold.
 _Avoid_: score, certainty, probability
 
+**Gate**:
+The deterministic rules that decide which changes are eligible for automatic repair at all. A finding whose change is outside the gate is flagged however confident the model is. Widened only by adding a shape, never by lowering the threshold (ADR-0003).
+_Avoid_: filter, whitelist, guard
+
+**Shape**:
+One kind of change the gate admits, recognised from the syntax trees of the chunk before and after: a renamed parameter, or a changed default, each with nothing else touched.
+_Avoid_: pattern, category, type
+
 **Flag**:
-A finding surfaced for human review instead of repaired: because validation refused the repair, because the repair could not be applied, or because the run hit its spend ceiling first. Low confidence will be a fourth reason once confidence exists.
+A finding surfaced for human review instead of repaired: because the repair could not be applied, because validation refused it, because its change is outside the gate, because the model's confidence inside the gate fell short of the threshold, or because the run hit its spend ceiling first. It says which, beside the finding's explanation of what was suspected.
 _Avoid_: warning, alert, notice
 
 **Corpus**:

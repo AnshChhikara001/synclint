@@ -37,6 +37,12 @@ access to GitHub, so every judgement the tool makes is reachable offline.
   a repair left alone is measured instead (below). A quote the section does not
   contain exactly once, or a rewrite validation refuses, becomes a flag with the
   reason. Repairs print as a diff against the section.
+- **Rules-gated confidence** (ADR-0003) — a repair is proposed only if its change
+  has one of two shapes, read off the syntax trees: one parameter renamed
+  everywhere it is used, or one default value changed, with nothing else
+  touched. Anything else is flagged however confident the model is. Inside the
+  gate the model is asked how likely the repair is exactly right, and must reach
+  `--confidence-threshold` (default 0.9, set before any answer was recorded).
 - **Spend control** — every model response cached on disk by prompt, a ledger of
   tokens and dollars, and a ceiling checked before each call rather than after.
 - **Fixture corpus** — `corpus/` holds a small library with documentation,
@@ -47,7 +53,7 @@ access to GitHub, so every judgement the tool makes is reachable offline.
   truth. It replays recorded answers and cannot make a call, so the numbers
   below cost nothing to reproduce and do not move between runs.
 
-Not yet built: rules-gated confidence, the `publish` step, and the Action itself.
+Not yet built: the `publish` step and the Action itself.
 
 ## Measured so far
 
@@ -141,23 +147,38 @@ truth for each repair — text a correct one must say and text it must no longer
 say — so validation, itself a model's judgement, is scored against something
 that is not. Recording the 17 repair and validation answers cost **$0.0139**.
 
-| Repaired case | Validation | Ground truth | Text kept |
-| --- | --- | --- | --- |
-| write-json-path-renamed | proposed | correct | 98% |
-| renew-days-default | never reached | not applied | — |
-| write-csv-columns-default | proposed | correct | 94% |
-| matches-case-sensitive-default | proposed | correct | 81% |
-| remove-returns-nothing | never reached | not applied | — |
-| load-drops-create-missing | proposed | correct | 54% |
-| parse-query-drops-or | never reached | not applied | — |
-| overdue-drops-grace | proposed | correct | 49% |
-| titles-drops-sort | proposed | correct | 55% |
-| is-valid-gains-isbn10 | proposed | incorrect | 83% |
+| Repaired case | Shape | Outcome | Confidence | Ground truth | Text kept |
+| --- | --- | --- | --- | --- | --- |
+| write-json-path-renamed | renamed-parameter | proposed | 97% | correct | 98% |
+| renew-days-default | changed-default | not applied | — | not applied | — |
+| write-csv-columns-default | changed-default | proposed | 98% | correct | 94% |
+| matches-case-sensitive-default | changed-default | proposed | 98% | correct | 81% |
+| remove-returns-nothing | — | not applied | — | not applied | — |
+| load-drops-create-missing | — | outside the gate | — | correct | 54% |
+| parse-query-drops-or | — | not applied | — | not applied | — |
+| overdue-drops-grace | — | outside the gate | — | correct | 49% |
+| titles-drops-sort | — | outside the gate | — | correct | 55% |
+| is-valid-gains-isbn10 | — | outside the gate | — | incorrect | 83% |
 
-**Seven applied, all seven proposed, six of them correct.** Validation refused
-nothing it saw, and the one wrong repair got past it: the `is_valid` repair
-admits ten-digit ISBNs but keeps the advice to convert them first, which the
-change made pointless, and it reflows three lines into one.
+**Validation passed all seven it saw, one of them wrong. The gate stopped that
+one.** The `is_valid` repair admits ten-digit ISBNs but keeps the advice to
+convert them first, which the change made pointless. Its change rewrites a
+function body, which is not a shape the gate admits, so it is flagged. The
+price: three correct repairs are flagged with it, because a removed capability
+is never one narrow shape. **Three proposed, three correct**, where validation
+alone proposed seven with one wrong.
+
+| Shape | Repairs | Correct | Proposed at ≥ 90% | Proposed and correct |
+| --- | --- | --- | --- | --- |
+| renamed-parameter | 1 | 1 (100%) | 1 | 1 |
+| changed-default | 3 | 2 (67%) | 2 | 2 |
+| outside the gate | 6 | 3 (50%) | 0 | 0 |
+
+The rules did all of the work and the threshold none. The model gave the three
+repairs inside the gate 97–98%, so any threshold up to 0.97 proposes the same
+three. The gate's shapes agree with the manifest's hand-written kinds on all
+sixteen cases that change a chunk, though the rules were written from the ADR,
+not from the corpus. Recording the three confidence answers cost **$0.0022**.
 
 Three repairs never reached validation because their quotes did not match the
 section. Two quoted the whole section plus a newline it does not end with, and
@@ -172,7 +193,7 @@ guard refused all seven, and one repair in ten came out proposed and correct.
 That cost $0.0114 and is reverted. Commit `68c98d0` keeps its answers, so the
 numbers can be recomputed.
 
-122 tests, mypy strict, no API spend in the suite — every test replays a recorded
+149 tests, mypy strict, no API spend in the suite — every test replays a recorded
 answer or injects a fake.
 
 ## Limitations
@@ -197,8 +218,15 @@ answer or injects a fake.
   present on both sides of a diff, so a newly added function the documentation
   never mentions goes unreported.
 - **Validation grades the same model's work.** It refused none of the seven
-  repairs it saw, one of them wrong. The ground truth that caught it is hand-written for
-  seventeen sections and does not exist on a real repository.
+  repairs it saw, one of them wrong. The gate caught that one here, but the
+  gate cannot catch a wrong repair of an eligible shape, and the ground truth
+  that judges it is hand-written for seventeen sections.
+- **The calibration table is four repairs deep inside the gate.** Nothing about
+  whether 90% from the model means 90% right can be read from it yet, and the
+  model's confidence did not vary enough to test the threshold at all.
+- **The gate is narrow on purpose.** Every removed capability is flagged, even
+  when the repair is right, and a flagged finding outside the gate still pays
+  for a repair and its validation so the reviewer has a rewrite to start from.
 - **A repair rewrites the whole section.** The model will not quote small at
   low reasoning effort, even when told to, so byte-identity outside the edits
   holds only in name. Text kept measures the damage; nothing bounds it.
