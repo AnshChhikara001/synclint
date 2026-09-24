@@ -206,8 +206,22 @@ def test_a_repair_that_fails_validation_is_flagged_with_the_reason(
         [("after three attempts", "after five"), ("three attempts,", "five,")],
         [("three attempts", "three attempts")],
         [],
+        [
+            (
+                "Call `fetch(url)` to download a page. It gives up after three attempts,\n"
+                "so a flaky server costs you at most three requests.",
+                "Call `fetch(url)`. It gives up after five attempts.",
+            )
+        ],
     ],
-    ids=["not-in-section", "ambiguous", "overlapping", "no-change", "no-edits"],
+    ids=[
+        "not-in-section",
+        "ambiguous",
+        "overlapping",
+        "no-change",
+        "no-edits",
+        "whole-section",
+    ],
 )
 def test_a_repair_that_cannot_be_applied_is_flagged_rather_than_guessed_at(
     tmp_path: Path, edits: list[tuple[str, str]]
