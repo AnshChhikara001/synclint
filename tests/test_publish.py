@@ -8,6 +8,7 @@ import pytest
 from synclint.__main__ import main
 from synclint.analyse import Finding, Flag, Repair, Report
 from synclint.github import GitHubError
+from synclint.index import IndexUsed
 from synclint.model import Spend
 from synclint.publish import MARKER, Routing, publish, route, summary
 
@@ -169,6 +170,16 @@ def test_a_flag_shows_the_rewrite_that_was_tried_and_why_it_was_not_proposed() -
     assert "Not repaired: validation refused it." in body
     assert "The rewrite that was tried" in body
     assert "+Call `load(path)`." in body
+
+
+def test_the_comment_says_which_index_the_run_used() -> None:
+    used = IndexUsed("abc1234" + "0" * 33, None, "there is no index at .synclint/index.json")
+    run = replace(report(), index=used)
+
+    body = summary(run, route(run, FILES), links={})
+
+    assert "built for this run at the base, abc1234" in body
+    assert "there is no index at .synclint/index.json" in body
 
 
 def test_a_diff_that_quotes_a_code_fence_is_fenced_with_a_longer_one() -> None:

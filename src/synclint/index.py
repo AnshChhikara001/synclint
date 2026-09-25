@@ -150,7 +150,7 @@ class IndexUsed:
     def describe(self) -> str:
         """One sentence for the report, naming the index and the commit it describes."""
         if self.path is not None:
-            return f"Index: {self.path}, committed, built at {self.revision[:7]}."
+            return f"Index: {self.path}, built at {self.revision[:7]}."
         return (
             f"Index: built for this run at the base, {self.revision[:7]}, "
             f"because {self.passed_over}."
@@ -162,7 +162,7 @@ def index_for(
 ) -> tuple[Index, IndexUsed]:
     """The index to analyse a change from `base` against, and which one it was.
 
-    The committed index at `path`, relative to `root`, is used if it still
+    The committed index at `path` is used if it still
     describes `base`: it records the commit it was built at, it was built
     from the same documentation globs, and no Python or documentation file
     differs between that commit and `base`. Compared by content rather than
@@ -173,15 +173,13 @@ def index_for(
     missing index makes a run slower rather than wrong.
     """
     commit = run(root, "rev-parse", "--verify", f"{base}^{{commit}}").strip()
-    committed = root / path
-    index = (
-        Index.from_json(committed.read_text(encoding="utf-8"))
-        if committed.is_file()
-        else None
-    )
-    stale = _stale(root, index, commit, documentation_globs, path)
+    index = Index.from_json(path.read_text(encoding="utf-8")) if path.is_file() else None
+    # Named as the repository sees it where it can be: the report is read on
+    # a pull request, where the runner's checkout directory means nothing.
+    shown = path.relative_to(root) if path.is_relative_to(root) else path
+    stale = _stale(root, index, commit, documentation_globs, shown)
     if index is not None and index.revision is not None and stale is None:
-        return index, IndexUsed(index.revision, str(path))
+        return index, IndexUsed(index.revision, str(shown))
     return (
         build_index_at(root, commit, documentation_globs),
         IndexUsed(commit, None, stale),

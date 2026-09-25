@@ -11,7 +11,7 @@ from typing import Literal
 
 from synclint.changes import ChunkChange, VanishedChunk, chunk_diff, touched_chunks
 from synclint.confidence import DEFAULT_THRESHOLD, outside_reason, rate, shape_of
-from synclint.index import Index
+from synclint.index import Index, IndexUsed
 from synclint.model import ModelClient, Spend, SpendCeilingExceeded
 from synclint.repair import Rejected, repair
 from synclint.sections import Section
@@ -114,6 +114,10 @@ class Report:
     Every finding resolves to exactly one repair or one flag. `unrepaired`
     counts the flags that are there only because the run reached its ceiling
     first, so that a caller can tell them from the flags validation earned.
+
+    `index` says which index the run used, when the caller chose one with
+    `index_for`. It is `None` for an index handed straight to `analyse`, as
+    the corpus harness does, which has nothing to say about where it came from.
     """
 
     findings: tuple[Finding, ...]
@@ -123,6 +127,7 @@ class Report:
     repairs: tuple[Repair, ...]
     flags: tuple[Flag, ...]
     spend: Spend
+    index: IndexUsed | None = None
 
 
 # The second paragraph draws synclint's boundary: silence is not inaccuracy. A

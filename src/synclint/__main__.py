@@ -8,6 +8,7 @@ import sys
 import tempfile
 from collections import Counter
 from collections.abc import Iterable, Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from synclint.analyse import Report, analyse
@@ -28,9 +29,11 @@ from synclint.embeddings import (
 )
 from synclint.index import (
     DEFAULT_DOCUMENTATION_GLOBS,
+    DEFAULT_INDEX_PATH,
     DEFAULT_SIMILARITY_THRESHOLD,
-    Index,
     build_index,
+    index_for,
+    working_revision,
 )
 from synclint.github import GitHub
 from synclint.model import (
@@ -111,10 +114,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--index",
         type=Path,
         dest="index_path",
-        help="the index to analyse against; built in memory if not given",
+        help=(
+            f"the committed index; defaults to {DEFAULT_INDEX_PATH} in the repository. "
+            "Built in memory at the base instead when missing or out of date"
+        ),
     )
     # An index built in memory has to be built the way the committed one was,
-    # so this subcommand takes the glob too.
+    # and one built another way is out of date, so this subcommand takes the
+    # glob too.
     _add_documentation_glob(analyse_parser)
     analyse_parser.add_argument(
         "--model",
@@ -253,9 +260,10 @@ def _embedding_client(cache: Path) -> EmbeddingClient:
 def _index(arguments: argparse.Namespace) -> None:
     globs = arguments.documentation_globs or DEFAULT_DOCUMENTATION_GLOBS
     embeddings = _embedding_client(arguments.cache) if arguments.embed else None
-    document = build_index(
+    index = build_index(
         arguments.root, globs, embeddings=embeddings, threshold=arguments.threshold
-    ).to_json()
+    )
+    document = replace(index, revision=working_revision(arguments.root, globs)).to_json()
     if arguments.out:
         arguments.out.write_text(document, encoding="utf-8")
     else:
@@ -346,14 +354,12 @@ def _analyse(arguments: argparse.Namespace) -> None:
     # been paid for and thrown away.
     github = _github(arguments) if arguments.pull_request is not None else None
     model = _paying_client(arguments, arguments.cache)
-    # TODO: #11 decides what to do when the index is missing or older than the
-    # base revision. Until then a missing one is rebuilt from the working tree,
-    # which is the head revision rather than the base.
     globs = arguments.documentation_globs or DEFAULT_DOCUMENTATION_GLOBS
-    index = (
-        Index.from_json(arguments.index_path.read_text(encoding="utf-8"))
-        if arguments.index_path
-        else build_index(arguments.root, globs)
+    index, used = index_for(
+        arguments.root,
+        arguments.base,
+        arguments.index_path or arguments.root / DEFAULT_INDEX_PATH,
+        globs,
     )
     report = analyse(
         arguments.root,
@@ -363,6 +369,7 @@ def _analyse(arguments: argparse.Namespace) -> None:
         model,
         threshold=arguments.confidence_threshold,
     )
+    report = replace(report, index=used)
     sys.stdout.write(render(report))
     if github is not None:
         comment = publish(
@@ -425,6 +432,8 @@ def render(report: Report) -> str:
             f"finding{_plural(report.unrepaired)} unrepaired. Raise --ceiling to go on.",
             "",
         ]
+    if report.index is not None:
+        lines += [report.index.describe(), ""]
     spend = report.spend
     lines.append(
         f"{spend.calls} model call{_plural(spend.calls)}, "

@@ -212,6 +212,8 @@ def summary(
     lines.append(
         f"\n<sub>{_count(spend.calls, 'model call')}, ${spend.dollars:.4f}.</sub>"
     )
+    if report.index is not None:
+        lines.append(f"<sub>{report.index.describe()}</sub>")
     # TODO: GitHub refuses a comment over 65,536 characters. A run that flags
     # dozens of sections with a rewrite each could reach that; nothing trims it.
     return "\n".join(lines) + "\n"
