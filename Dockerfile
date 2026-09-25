@@ -3,11 +3,10 @@
 # interpreter path means the same thing in the second stage as in the first.
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS build
 WORKDIR /synclint
-# No bytecode compiled ahead: the image is built on every run, so compiling
-# every module here costs more than compiling the ones imported, at import.
-ENV UV_LINK_MODE=copy
 COPY pyproject.toml uv.lock README.md ./
 COPY src src
+# No --compile-bytecode: the image is built on every run, so compiling every
+# module here costs more than compiling the ones imported, at import.
 RUN uv sync --frozen --no-dev --no-editable
 
 FROM python:3.12-slim-bookworm

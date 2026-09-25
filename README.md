@@ -87,6 +87,7 @@ comment on a real pull request is still to come.
         steps:
           - uses: actions/checkout@v5
             with:
+              ref: ${{ github.event.pull_request.head.sha }}  # not the merge commit
               fetch-depth: 0   # both revisions; a shallow clone is refused
           - uses: AnshChhikara001/synclint@main
             with:
@@ -95,7 +96,10 @@ comment on a real pull request is still to come.
 The other inputs — `documentation-glob`, `model`, `confidence-threshold`,
 `ceiling` — default to the command line's defaults; `action.yml` describes each.
 The key reaches the container as an environment variable, never as an argument,
-because the runner prints a container's arguments.
+because the runner prints a container's arguments. The head is checked out
+rather than GitHub's default merge commit because the index is still built from
+the working tree (#11), and the merge commit holds documentation the pull
+request never touched.
 
 ## Measured so far
 
@@ -235,7 +239,7 @@ guard refused all seven, and one repair in ten came out proposed and correct.
 That cost $0.0114 and is reverted. Commit `68c98d0` keeps its answers, so the
 numbers can be recomputed.
 
-180 tests, mypy strict, no API spend in the suite — every test replays a recorded
+181 tests, mypy strict, no API spend in the suite — every test replays a recorded
 answer or injects a fake.
 
 ## Limitations
@@ -274,9 +278,9 @@ answer or injects a fake.
   holds only in name. Text kept measures the damage; nothing bounds it.
 - **Quotes must match exactly.** Three of ten repairs were lost to that, two to
   a trailing newline.
-- **Pull requests from forks go unreviewed.** GitHub gives a fork's
-  `pull_request` run no secrets, so there is no key; the Action warns and exits
-  cleanly rather than failing a contributor's checks. `pull_request_target`
+- **Pull requests from forks and from Dependabot go unreviewed.** GitHub gives
+  their `pull_request` runs no Actions secrets, so there is no key; the Action
+  warns and exits cleanly rather than failing their checks. `pull_request_target`
   would reach them, and is not the documented trigger because the workflow
   around the Action would then be one careless step from running a stranger's
   code with the repository's key (ADR-0006). Under it, repairs degrade to
