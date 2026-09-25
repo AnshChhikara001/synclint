@@ -1,3 +1,8 @@
-Verified 1 section; 0 have drifted.
+Verified 1 section; 0 have drifted. 1 names code the change deleted.
+
+README.md#humanize > Usage > Date & time humanization  (src/humanize/time.py::naturalday, deleted)
+    It names `naturalday`, which no longer exists: the change removed it from `src/humanize/time.py`, and nothing by that name appeared anywhere else.
+
+    Flagged: the code it describes is gone, so there is nothing for a repair to describe; rewriting the section or removing it is its author's call
 
 1 model call, 709 tokens in, 138 out, $0.0012 spent.

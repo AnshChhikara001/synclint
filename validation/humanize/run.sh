@@ -9,7 +9,9 @@
 #     OPENAI_API_KEY=unused validation/humanize/run.sh
 #
 # results/ holds what the paying run printed, and index.json the index it ran
-# against. A replay writes elsewhere and is compared with results/, the last
+# against. Two files have since gained a finding that cost nothing: a
+# disappearance (#10), where the chunk a section names was deleted. Their
+# spend lines are still the paying run's. A replay writes elsewhere and is compared with results/, the last
 # line of each aside, since that is the one that says what was spent.
 #
 # A change with no recorded answer is asked for real, at most $0.03 per change.
