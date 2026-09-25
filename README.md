@@ -63,8 +63,39 @@ access to GitHub, so every judgement the tool makes is reachable offline.
   truth. It replays recorded answers and cannot make a call, so the numbers
   below cost nothing to reproduce and do not move between runs.
 
-Not yet built: the Action itself — `action.yml`, the container, the workflow
-(#13). `publish` has not yet run against a live pull request.
+- **The Action** — `action.yml` and a Dockerfile. The container's entry point
+  reads the `pull_request` event, diffs from where the branch forked rather than
+  from the base branch's tip, and hands the rest to `analyse --pull-request`, so
+  the Action and the command line cannot disagree. The image is 95MB
+  compressed, installed from the lockfile, and built fresh on each run (about
+  12 seconds cold on a laptop).
+
+Not yet: a run against a live pull request. The container has been run
+end to end locally, through `analyse` to GitHub refusing a fake token; a real
+comment on a real pull request is still to come.
+
+## Using it
+
+    name: synclint
+    on: pull_request
+    permissions:
+      contents: write        # the branch of repairs
+      pull-requests: write   # the comment, and the pull request of repairs
+    jobs:
+      synclint:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v5
+            with:
+              fetch-depth: 0   # both revisions; a shallow clone is refused
+          - uses: AnshChhikara001/synclint@main
+            with:
+              api-key: ${{ secrets.OPENAI_API_KEY }}
+
+The other inputs — `documentation-glob`, `model`, `confidence-threshold`,
+`ceiling` — default to the command line's defaults; `action.yml` describes each.
+The key reaches the container as an environment variable, never as an argument,
+because the runner prints a container's arguments.
 
 ## Measured so far
 
@@ -204,7 +235,7 @@ guard refused all seven, and one repair in ten came out proposed and correct.
 That cost $0.0114 and is reverted. Commit `68c98d0` keeps its answers, so the
 numbers can be recomputed.
 
-171 tests, mypy strict, no API spend in the suite — every test replays a recorded
+180 tests, mypy strict, no API spend in the suite — every test replays a recorded
 answer or injects a fake.
 
 ## Limitations
@@ -243,11 +274,15 @@ answer or injects a fake.
   holds only in name. Text kept measures the damage; nothing bounds it.
 - **Quotes must match exactly.** Three of ten repairs were lost to that, two to
   a trailing newline.
-- **A pull request from a fork cannot be written to**, so repairs degrade to
-  diffs in the comment, and so does a token GitHub answers 403. Deliberate, and
-  stated in the comment rather than failing quietly. But a fork's
-  `pull_request` run gets a token that cannot comment either; which trigger
-  gets around that without handing fork code a write token is #13's problem.
+- **Pull requests from forks go unreviewed.** GitHub gives a fork's
+  `pull_request` run no secrets, so there is no key; the Action warns and exits
+  cleanly rather than failing a contributor's checks. `pull_request_target`
+  would reach them, and is not the documented trigger because the workflow
+  around the Action would then be one careless step from running a stranger's
+  code with the repository's key (ADR-0006). Under it, repairs degrade to
+  diffs in the comment, as they do for a token GitHub answers 403.
+- **The image is built on every run**, not pulled from a registry: 95MB
+  compressed and 436MB unpacked, of which git's layer is 92MB and numpy 68MB.
 - **The repair branch is rebuilt on every push.** Repairs are recomputed
   against the new head, so a human's amendment to `synclint/repairs-N` is
   overwritten, and a repair pull request stays open after a push that leaves
