@@ -51,6 +51,15 @@ access to GitHub, so every judgement the tool makes is reachable offline.
   touched. Anything else is flagged however confident the model is. Inside the
   gate the model is asked how likely the repair is exactly right, and must reach
   `--confidence-threshold` (default 0.9, set before any answer was recorded).
+- **Index lifecycle** — the index is committed at `.synclint/index.json` and
+  records the commit it was built at and the documentation globs it read.
+  `.github/workflows/index.yml` rebuilds it when Python or documentation lands
+  on main. `analyse` trusts it only if no file it reads differs between that
+  commit and the base — content, not commit identity, since the commit that
+  commits an index is never the one it was built at. Otherwise, or when it is
+  missing, the run builds its own at the base from `git archive`, without
+  touching the checkout. An out-of-date index makes a run slower, not wrong, and the
+  report and the comment both say which index was used and why.
 - **Spend control** — every model response cached on disk by prompt, a ledger of
   tokens and dollars, and a ceiling checked before each call rather than after.
 - **Fixture corpus** — `corpus/` holds a small library with documentation,
@@ -107,9 +116,14 @@ The other inputs — `documentation-glob`, `model`, `confidence-threshold`,
 `ceiling` — default to the command line's defaults; `action.yml` describes each.
 The key reaches the container as an environment variable, never as an argument,
 because the runner prints a container's arguments. The head is checked out
-rather than GitHub's default merge commit because the index is still built from
-the working tree (#11), and the merge commit holds documentation the pull
-request never touched.
+rather than GitHub's default merge commit so that the working tree is the code
+under review; the index a run uses describes the base either way.
+
+To keep a committed index fresh, copy `.github/workflows/index.yml`, installing
+synclint with `pip install git+https://github.com/AnshChhikara001/synclint@main`
+in place of `pip install .`. Without it every run builds its own index, which
+costs seconds and no money: only embedding links cost anything, and a run's own
+index is name links only.
 
 ## Measured so far
 
@@ -303,7 +317,7 @@ It ran from the command line, not as an installed Action: that needs a fork
 of humanize carrying these eleven pull requests, and the Action's own path
 from event to `analyse` is already exercised by the live run above.
 
-204 tests, mypy strict, no API spend in the suite — every test replays a recorded
+225 tests, mypy strict, no API spend in the suite — every test replays a recorded
 answer or injects a fake.
 
 ## Limitations
@@ -327,11 +341,29 @@ answer or injects a fake.
 - **A chunk the change adds is invisible.** Only chunks that existed before
   the change are compared, so new code nothing documents yet raises nothing,
   and a page claiming to list everything is not caught falling out of date.
-- **The Action does not report disappearances yet.** Without `--index` the
-  index is built from the working tree, which the Action checks out at the
-  head, where a deleted chunk has nothing to link to. The corpus and humanize
-  runs index the base, and find them there. Building the index at the base is
-  #11's; until then, a chunk moved and changed is missed the same way.
+- **Sections are read at the base.** The index, committed or built for the
+  run, describes the base, so a pull request that changes a function and fixes
+  its documentation in the same pull request has the section checked as it read
+  before the fix, and can be told to fix what it already fixed. Before #11 the
+  Action indexed the head instead, and missed every disappearance.
+- **Freshness is judged by file, not by what the index holds.** Any change to a
+  Python or documentation file since it was built counts as out of date, a function
+  body included, so on a busy branch the fallback runs more often than it has
+  to. The rebuild commit also loses a race with a push that lands while it
+  runs, and the next pull request builds its own until the following rebuild.
+- **The fallback links by name only.** A committed index built with `--embed`
+  is replaced, when out of date, by one without its embedding links.
+- **The workflow assumes the default documentation globs.** Its path filter
+  and its `index` step name them; a repository with its own has to change both,
+  or every run builds its own index.
+- **The rebuild pushes to main.** A branch protection rule that refuses the
+  workflow's token leaves the index to fall behind, and every run builds its
+  own.
+- **An index does not record which synclint built it.** One built before a
+  change to how chunks or links are made still reads as current.
+- **The fallback reads the base through `git archive`,** so documentation a
+  repository marks `export-ignore`, and anything in a submodule, is missing
+  from an index built for a run.
 - **A disappearance is only as good as the name link behind it.** It is never
   put to a model, so a deleted method called `write` would flag every section
   that uses the word. A move is followed only when it is unambiguous and keeps
