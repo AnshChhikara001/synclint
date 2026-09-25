@@ -1,8 +1,9 @@
 # Rebuilds the committed index when code or documentation lands on main, so
 # that a pull request is analysed against it rather than against one built for
-# the run. A run that misses, or loses a race with the next push, costs nothing
-# worse than that: analyse judges an index by what changed since it was built,
-# and builds its own when the committed one is behind.
+# the run. A rebuild that never lands costs nothing worse than that: analyse
+# judges an index by what changed since it was built, and builds its own when
+# the committed one is behind. One that loses a race with the next push fails
+# red at `git push`, and the next push's rebuild lands in its place.
 name: index
 
 on:
@@ -27,8 +28,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # Another repository installs synclint from git instead:
-      #   pip install git+https://github.com/AnshChhikara001/synclint@main
       - run: pip install .
       - run: python -m synclint index . --out .synclint/index.json
       # A push made with the workflow's own token starts no workflow, so this

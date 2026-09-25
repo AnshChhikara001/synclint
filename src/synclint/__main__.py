@@ -435,8 +435,10 @@ def render(report: Report) -> str:
             f"finding{_plural(report.unrepaired)} unrepaired. Raise --ceiling to go on.",
             "",
         ]
+    # Straight above the spend line, with no blank between: a replay compared
+    # against output recorded before #11 can then ignore exactly this line.
     if report.index is not None:
-        lines += [report.index.describe(), ""]
+        lines.append(report.index.describe())
     spend = report.spend
     lines.append(
         f"{spend.calls} model call{_plural(spend.calls)}, "
