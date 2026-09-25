@@ -1,4 +1,9 @@
 {
+  "revision": "392aef707c0e74341ab4a51420984e9ea6b566c5",
+  "documentation_globs": [
+    "README.md",
+    "docs/**/*.md"
+  ],
   "chunks": [
     {
       "id": "src/humanize/filesize.py::naturalsize",

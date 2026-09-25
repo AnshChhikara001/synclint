@@ -53,7 +53,9 @@ for patch in "$here"/changes/*.patch; do
 done
 
 if [ -d "$here/results" ]; then
-    diff -r -I 'spent\.$' "$here/results" "$work/results"
+    # The Index: line, and the blank after it, are ignored too: results/
+    # predates #11, which added them.
+    diff -r -I 'spent\.$' -I '^Index: ' -I '^$' "$here/results" "$work/results"
     echo "Findings and repairs match the recorded run."
 else
     cp -r "$work/results" "$here/results"
