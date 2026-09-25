@@ -37,8 +37,12 @@ The model pass that decides whether a suspect actually drifted. Every suspect is
 _Avoid_: check, validation, review
 
 **Finding**:
-A suspect confirmed to have drifted, together with the explanation of what is now wrong.
+A suspect confirmed to have drifted, or a disappearance, together with the explanation of what is now wrong. The report says which of the two each one is.
 _Avoid_: issue, error, problem, violation
+
+**Disappearance**:
+A section that names a chunk the change deleted. Moves are followed first — a file git judges renamed, or a chunk of the same qualified name appearing in exactly one other file — so what is left really is gone, renamed, or moved somewhere synclint cannot be sure of. Reported as a finding without verification, because nothing a model could say would make the section right, and always flagged, because there is no new code for a repair to describe. Only a name link counts: a section linked by embedding similarity alone never named the chunk.
+_Avoid_: deletion, broken link, stale link, orphan
 
 **Repair**:
 A rewritten section that resolves a finding while preserving the parts that were already accurate.
@@ -61,7 +65,7 @@ One kind of change the gate admits, recognised from the syntax trees of the chun
 _Avoid_: pattern, category, type
 
 **Flag**:
-A finding surfaced for human review instead of repaired: because the repair could not be applied, because validation refused it, because its change is outside the gate, because the model's confidence inside the gate fell short of the threshold, or because the run hit its spend ceiling first. It says which, beside the finding's explanation of what was suspected.
+A finding surfaced for human review instead of repaired: because the repair could not be applied, because validation refused it, because its change is outside the gate, because the model's confidence inside the gate fell short of the threshold, because the run hit its spend ceiling first, or because it is a disappearance. It says which, beside the finding's explanation of what was suspected.
 _Avoid_: warning, alert, notice
 
 **Corpus**:
@@ -73,7 +77,7 @@ One planted change to the corpus, together with the section and the chunk it is 
 _Avoid_: example, scenario, instance
 
 **Reach**:
-Whether a case's expected section and chunk meet as a suspect at all. The ceiling on what a run could possibly find before the model is asked anything, and the half of recall that costs nothing to measure. A decoy has no expected pair, so its reach is whether it raises a suspect at all — the ceiling on the false positives it could cause.
+Whether a case's expected section and chunk meet as a suspect at all, or as a disappearance where the case deletes the chunk. The ceiling on what a run could possibly find before the model is asked anything, and the half of recall that costs nothing to measure. A decoy has no expected pair, so its reach is whether it raises a suspect at all — the ceiling on the false positives it could cause.
 _Avoid_: coverage, detectable, hit
 
 **Link recall**:

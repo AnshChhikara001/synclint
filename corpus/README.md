@@ -2,8 +2,8 @@
 
 Every accuracy number synclint publishes comes from here. The corpus is a small
 Python library — `bookshelf`, eleven modules, nine markdown pages and a couple
-of test modules — with seventeen deliberately planted drift cases against it and
-thirteen decoys that must produce nothing at all.
+of test modules — with eighteen deliberately planted drift cases against it and
+fourteen decoys that must produce nothing at all.
 
 ## Layout
 
@@ -15,7 +15,7 @@ thirteen decoys that must produce nothing at all.
 Nothing here is a git repository. `build_corpus` materialises one: `base/`
 becomes the `base` branch, and each case and each decoy becomes a single commit
 on a branch of its own — `case/<id>` or `decoy/<id>` — off that base. They fan
-out rather than stack, so one index built at `base` serves all thirty, each is a
+out rather than stack, so one index built at `base` serves all thirty-two, each is a
 diff a run can be pointed at directly, and a decoy's diff holds nothing but the
 decoy:
 
@@ -25,7 +25,7 @@ decoy:
 
 ## The cases
 
-Four kinds, five of each of the first three:
+Five kinds, five of each of the first three:
 
 | Kind | How many | What it is |
 |---|---|---|
@@ -33,15 +33,21 @@ Four kinds, five of each of the first three:
 | `changed-default` | 5 | a documented default value is different |
 | `removed-capability` | 5 | something the documentation promises is gone |
 | `contradicted-claim` | 2 | the page states something the code now falsifies |
+| `deleted-chunk` | 1 | the page names a function or method that is gone |
 
 Every case changes code only. A planted case that edited a markdown file would
 have repaired the drift it was meant to plant, so the audit refuses one.
 
 `contradicted-claim` is the odd one at two, and the reason is below.
+`deleted-chunk` is one because it is found without a model: a section that
+names a chunk no longer there is reported as a disappearance and never asked
+about, so a second case would measure the same few lines of code again. Its
+ground truth for a repair only has to tell the section apart from a correct
+one, because a disappearance is never repaired.
 
 ## The decoys
 
-Ten changes that must produce no finding. Without them there is no false
+Fourteen changes that must produce no finding. Without them there is no false
 positive rate, and a precision figure computed without negative cases is
 meaningless. Each one is a change a reviewer would recognise as real work.
 
@@ -52,17 +58,22 @@ meaningless. Each one is a change a reviewer would recognise as real work.
 | `comment-edit` | 2 | comments and docstrings, no code |
 | `formatting` | 2 | wrapped to a shorter line length |
 | `test-only` | 2 | a test module added, or an existing one extended |
+| `moved-chunk` | 1 | a documented function moved to another module word for word |
 
-Seven reach the model. The other six cannot produce a finding whatever a model
+Seven reach the model. The other seven cannot produce a finding whatever a model
 would have said about them: comments and layout do not survive a parse,
-docstrings are stripped before the comparison (ADR-0004), and test files are
-dropped whole. Six decoys measure the design, then, and seven measure the
-judgement — and the seven are where a precision figure is actually earned.
+docstrings are stripped before the comparison (ADR-0004), test files are
+dropped whole, and a chunk moved to another file is followed there and compared
+equal. Seven decoys measure the design, then, and seven measure the judgement —
+and the second seven are where a precision figure is actually earned. The
+moved one is the decoy for #10: if the move were not followed, the page naming
+`load` would be reported as naming deleted code, with no model to clear it.
 
 A kind is a claim about the change, and the audit holds the decoy to as much of
 it as it can see. An `internal-refactor` that changes no chunk is a no-op
 wearing a label; a `formatting` decoy that changes one is mislabelled; a
-`test-only` decoy that edits the library is neither. Any of the three would make
+`test-only` decoy that edits the library is neither, and a `moved-chunk` decoy
+that moves nothing is a refactor in the wrong column. Any of these would make
 a rate measured over it mean nothing, so each is a fault.
 
 What the audit cannot see is the rest of the claim. A chunk is a function or a
@@ -87,7 +98,8 @@ documentation is a fault rather than a measurement.
 
 This rebuilds the corpus, audits the manifest against it, and prints two
 measurements: how many cases synclint currently *reaches* — the expected section
-and the expected chunk meeting as a suspect, which is the most a run can get
+and the expected chunk meeting as a suspect, or as a disappearance where the
+case deletes the chunk, which is the most a run can get
 right before the model is asked anything — and how many decoys reach the model
 at all, which is where a false positive is still possible. It exits non-zero
 only on a fault in the corpus itself.
@@ -197,16 +209,16 @@ padded with cases the corpus does not have.
 ## What the manifest is not
 
 The manifest is ground truth, written by hand, and deliberately independent of
-what synclint can detect today. Two of the seventeen are out of reach as things
+what synclint can detect today. Two of the eighteen are out of reach as things
 stand:
 
 - `shelf-capacity-default` — the default lives in `Shelf.__init__`, but the
   prose documenting it names the class. Name matching links the section to
   `Shelf`, and `Shelf` itself did not change. Embedding links reach it at the
   default threshold, but findings are still scored over name links alone.
-- `catalogue-gains-merge` — a wholly new method. `changed_chunks` reports chunks
-  that exist on both sides of a diff, so an added one is invisible, and nothing
-  links to a name the documentation has never used.
+- `catalogue-gains-merge` — a wholly new method. synclint compares the chunks
+  that existed before a change, following them if they moved, so an added one
+  is invisible, and nothing links to a name the documentation has never used.
 
 Both are real drift, correctly recorded. They are here to be measured, and the
 right response is to move the number, not the manifest.

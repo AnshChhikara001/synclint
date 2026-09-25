@@ -29,6 +29,14 @@ access to GitHub, so every judgement the tool makes is reachable offline.
   model. Comments, formatting and docstring edits do not survive a parse and so
   cannot produce a finding. Sections checked and found accurate are reported too,
   so silence about a section means it was never in question.
+- **Deleted code** — a chunk gone after the change is looked for first: in the
+  file git's rename detection pairs its old file with, then as the one chunk of
+  its qualified name that appeared anywhere else. A chunk followed there is
+  compared like any other, and one moved word for word raises nothing. What is
+  left is gone, and every section that names it is a *disappearance*: reported
+  without asking the model, since nothing it said could make the section right,
+  and always flagged, since there is no new code for a repair to describe. The
+  comment lists them apart from the flags.
 - **Repair and validation** — each finding is rewritten into its section, then
   a second model pass gates the rewrite. The model answers with quoted spans and
   their replacements, and synclint applies them itself, so prose outside the
@@ -46,7 +54,7 @@ access to GitHub, so every judgement the tool makes is reachable offline.
 - **Spend control** — every model response cached on disk by prompt, a ledger of
   tokens and dollars, and a ceiling checked before each call rather than after.
 - **Fixture corpus** — `corpus/` holds a small library with documentation,
-  seventeen deliberately planted drift cases and thirteen decoys that must
+  eighteen deliberately planted drift cases and fourteen decoys that must
   produce nothing, with ground truth for each. See its own README.
 - **`publish`** — `analyse --pull-request N` writes the report to the pull
   request. One summary comment, found by a hidden marker and edited in place on
@@ -117,11 +125,14 @@ figures every time:
 | changed-default | 5 | 3 | 60% |
 | removed-capability | 5 | 5 | 100% |
 | contradicted-claim | 2 | 1 | 50% |
-| All | 17 | 10 | 59% |
+| deleted-chunk | 1 | 1 | 100% |
+| All | 18 | 11 | 61% |
 
-**Precision 100%** (10 true positives, 0 false positives). **Recall 59%.** Of
-the thirteen decoys, six raise no suspect and cannot produce a finding at all;
-the seven that do reach the model were all cleared by it.
+**Precision 100%** (11 true positives, 0 false positives). **Recall 61%.** Of
+the fourteen decoys, seven raise no suspect and cannot produce a finding at
+all; the seven that do reach the model were all cleared by it. The eleventh
+true positive is the deleted chunk, which is found without a model call; it
+was added with #10, and the 59% the first ten came to has not moved.
 
 Precision is perfect because the model is conservative, and that conservatism is
 where the missing recall goes. Two of the seven misses never reach the model,
@@ -157,8 +168,8 @@ replays for free:
 
 | Links | Pairs linked | Planted pairs linked | Link recall | Suspects on cases | Suspects on decoys |
 | --- | --- | --- | --- | --- | --- |
-| name | 48 | 15 of 17 | 88% | 20 | 11 |
-| name + embedding ≥ 0.55 | 84 | 16 of 17 | 94% | 36 | 15 |
+| name | 48 | 16 of 18 | 89% | 20 | 11 |
+| name + embedding ≥ 0.55 | 84 | 17 of 18 | 94% | 36 | 15 |
 
 **The delta is one case**, and it costs 36 more links and 20 more questions to
 the model per corpus run, four of them on decoys. The pair gained is
@@ -172,8 +183,8 @@ the embeddings add links but not that case, and below 0.55 they add only suspect
 
 | Threshold | Pairs linked | Link recall | Suspects on cases | Suspects on decoys |
 | --- | --- | --- | --- | --- |
-| 0.65 | 55 | 88% | 22 | 11 |
-| 0.60 | 61 | 88% | 24 | 12 |
+| 0.65 | 55 | 89% | 22 | 11 |
+| 0.60 | 61 | 89% | 24 | 12 |
 | 0.55 | 84 | 94% | 36 | 15 |
 | 0.50 | 124 | 94% | 48 | 23 |
 | 0.45 | 164 | 94% | 60 | 26 |
@@ -259,25 +270,27 @@ answers are committed, so `validation/humanize/run.sh` replays it for nothing.
 | `precisedelta` format default `%0.2f` → `%0.1f` | find | found | proposed, 98%, correct |
 | `fractional(1.5)` gives `3/2`, not `1 1/2` | find | found | flagged (body), draft correct |
 | `naturaldate` gives ISO dates past five months | find | found | flagged (body), draft correct |
-| `apnumber` deleted | find | **missed**, never asked | — |
-| `naturalday` renamed `natural_day` | find | **missed**, asked and cleared | — |
+| `apnumber` deleted | find | found, a disappearance | flagged (gone) |
+| `naturalday` renamed `natural_day` | find | found, a disappearance | flagged (gone) |
 | `intcomma` body rewritten, same output | nothing | nothing, cleared | — |
 | `intword(format=)` renamed, README never passes it | nothing | nothing, cleared | — |
 | `naturalsize` gains `separator=" "` | nothing | nothing, cleared | — |
 | a comment in `scientific` reworded | nothing | nothing, never asked | — |
 
-**Five of seven found, no decoy flagged, three repairs proposed and all three
+**Seven of seven found, no decoy flagged, three repairs proposed and all three
 right**, checked by hand against the patched code; the flags' drafts are in
 the recorded answers. Twenty-two model calls cost **$0.0293**, against $0.30
 set aside.
 
-Both misses are the same gap, and neither is the model's fault. A deleted
-function has no chunk on the head side, so nothing is compared and nothing is
-asked. The rename is worse: `naturalday` vanishing is equally invisible, but
-`naturaldate`, which calls it, changed two lines — so the section that calls
-`humanize.naturalday` three times was checked, against `naturaldate`, and
-rightly judged still accurate *about `naturaldate`*. The report says one
-section was verified and none drifted, which is true and misleading.
+The first run found five: both misses were the same gap, and neither was the
+model's fault. A deleted function had no chunk on the head side, so nothing was
+compared and nothing asked. The rename was worse: `naturalday` vanishing was
+equally invisible, but `naturaldate`, which calls it, changed two lines — so
+the section that calls `humanize.naturalday` three times was checked, against
+`naturaldate`, and rightly judged still accurate *about `naturaldate`*. The
+report said one section was verified and none drifted, true and misleading.
+#10 closed it: both sections are now disappearances, found on replay without
+a model call, and nothing else in the eleven results moved.
 
 Two things went better than on the corpus. Every repair quoted only the lines
 it changed, where nine in ten corpus repairs quoted the whole section; these
@@ -290,7 +303,7 @@ It ran from the command line, not as an installed Action: that needs a fork
 of humanize carrying these eleven pull requests, and the Action's own path
 from event to `analyse` is already exercised by the live run above.
 
-181 tests, mypy strict, no API spend in the suite — every test replays a recorded
+202 tests, mypy strict, no API spend in the suite — every test replays a recorded
 answer or injects a fake.
 
 ## Limitations
@@ -311,11 +324,15 @@ answer or injects a fake.
 - **A default declared in a constructor is unreachable by name.** The default
   lives in `__init__` while the prose names the class. Embedding links reach the
   corpus's one example; whether they reach it in general is unmeasured.
-- **A chunk the change adds, removes or renames is invisible.** Chunk
-  comparison reports only chunks present on both sides of a diff. On humanize
-  that cost both misses: a deleted function, and a renamed one whose callers'
-  section was checked against the caller and cleared. Following renames and
-  reporting removals is ticket #10, not yet built.
+- **A chunk the change adds is invisible.** Only chunks that existed before
+  the change are compared, so new code nothing documents yet raises nothing,
+  and a page claiming to list everything is not caught growing stale.
+- **A disappearance is only as good as the name link behind it.** It is never
+  put to a model, so a deleted method called `write` would flag every section
+  that uses the word. A move is followed only when it is unambiguous and keeps
+  the qualified name: a function renamed, or moved into a class, is reported
+  gone, and a rename is also its new name's first appearance, which nothing
+  links to.
 - **Validation grades the same model's work.** It refused none of the seven
   repairs it saw, one of them wrong. The gate caught that one here, but the
   gate cannot catch a wrong repair of an eligible shape, and the ground truth
