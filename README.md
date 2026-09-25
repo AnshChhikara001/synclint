@@ -244,9 +244,10 @@ numbers can be recomputed.
 ### On a real repository
 
 The corpus was written by the same hand as the tool, so the same eleven-way
-test was run on code nobody here wrote: [humanize](https://github.com/python-humanize/humanize)
-at `392aef7`, its README split into eighteen sections, sixteen name links.
-Seven changes break a README example; four are decoys that break nothing. Each
+test was run on code nobody here wrote:
+[humanize](https://github.com/python-humanize/humanize) at `392aef7`, its
+README split into eighteen sections with sixteen name links
+(`validation/humanize/index.json`). Seven changes break a README example; four are decoys that break nothing. Each
 is a patch in `validation/humanize/changes/`, planted as its own branch off the
 pinned commit, and analysed through the command line the Action calls. The
 answers are committed, so `validation/humanize/run.sh` replays it for nothing.
@@ -266,12 +267,14 @@ answers are committed, so `validation/humanize/run.sh` replays it for nothing.
 | a comment in `scientific` reworded | nothing | nothing, never asked | — |
 
 **Five of seven found, no decoy flagged, three repairs proposed and all three
-right.** Twenty-two model calls cost **$0.0293**, against $0.30 set aside.
+right**, checked by hand against the patched code; the flags' drafts are in
+the recorded answers. Twenty-two model calls cost **$0.0293**, against $0.30
+set aside.
 
 Both misses are the same gap, and neither is the model's fault. A deleted
 function has no chunk on the head side, so nothing is compared and nothing is
 asked. The rename is worse: `naturalday` vanishing is equally invisible, but
-`naturaldate`, which calls it, changed one line — so the section that calls
+`naturaldate`, which calls it, changed two lines — so the section that calls
 `humanize.naturalday` three times was checked, against `naturaldate`, and
 rightly judged still accurate *about `naturaldate`*. The report says one
 section was verified and none drifted, which is true and misleading.
@@ -312,7 +315,7 @@ answer or injects a fake.
   comparison reports only chunks present on both sides of a diff. On humanize
   that cost both misses: a deleted function, and a renamed one whose callers'
   section was checked against the caller and cleared. Following renames and
-  reporting removals is #10.
+  reporting removals is ticket #10, not yet built.
 - **Validation grades the same model's work.** It refused none of the seven
   repairs it saw, one of them wrong. The gate caught that one here, but the
   gate cannot catch a wrong repair of an eligible shape, and the ground truth

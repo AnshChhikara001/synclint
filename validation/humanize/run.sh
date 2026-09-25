@@ -8,11 +8,13 @@
 #
 #     OPENAI_API_KEY=unused validation/humanize/run.sh
 #
-# results/ holds what the paying run printed. A replay prints the same findings
-# and repairs, with the last line reporting nothing spent.
+# results/ holds what the paying run printed, and index.json the index it ran
+# against. A replay writes elsewhere and is compared with results/, the last
+# line of each aside, since that is the one that says what was spent.
 #
-# A change with no recorded answer is asked for real, at most $0.03 per change,
-# so the eleven cannot pass the $0.30 set aside for this run.
+# A change with no recorded answer is asked for real, at most $0.03 per change.
+# Nine of the eleven reach the model, so a full recording cannot pass $0.27,
+# inside the $0.30 set aside for it.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -29,9 +31,9 @@ git -C "$work/humanize" checkout --quiet "$base"
 git -C "$work/humanize" branch --quiet base
 
 cd "$synclint"
-uv run python -m synclint index "$work/humanize" --out "$work/index.json"
+uv run python -m synclint index "$work/humanize" --out "$here/index.json"
 
-mkdir -p "$here/results"
+mkdir -p "$work/results"
 for patch in "$here"/changes/*.patch; do
     name=$(basename "$patch" .patch)
     git -C "$work/humanize" checkout --quiet -b "$name" base
@@ -42,8 +44,15 @@ for patch in "$here"/changes/*.patch; do
     git -C "$work/humanize" checkout --quiet base
     # analyse exits 1 when it stops at the ceiling; record that and go on.
     uv run python -m synclint analyse "$work/humanize" \
-        --base base --head "$name" --index "$work/index.json" \
+        --base base --head "$name" --index "$here/index.json" \
         --cache "$here/answers" --ceiling 0.03 \
-        > "$here/results/$name.txt" || echo "exit $?" >> "$here/results/$name.txt"
-    echo "$name: $(tail -1 "$here/results/$name.txt")"
+        > "$work/results/$name.txt" || echo "exit $?" >> "$work/results/$name.txt"
+    echo "$name: $(tail -1 "$work/results/$name.txt")"
 done
+
+if [ -d "$here/results" ]; then
+    diff -r -I 'spent\.$' "$here/results" "$work/results"
+    echo "Findings and repairs match the recorded run."
+else
+    cp -r "$work/results" "$here/results"
+fi

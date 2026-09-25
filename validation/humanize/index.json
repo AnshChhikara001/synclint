@@ -1,0 +1,1247 @@
+{
+  "chunks": [
+    {
+      "id": "src/humanize/filesize.py::naturalsize",
+      "path": "src/humanize/filesize.py",
+      "qualname": "naturalsize",
+      "signature": "def naturalsize(value: float | str, binary: bool=False, gnu: bool=False, format: str='%.1f') -> str",
+      "docstring": "Format a number of bytes like a human-readable filesize (e.g. 10 kB).\n\nBy default, decimal suffixes (kB, MB) are used.\n\nNon-GNU modes are compatible with jinja2's `filesizeformat` filter.\n\nExamples:\n    ```pycon\n    >>> naturalsize(3000000)\n    '3.0 MB'\n    >>> naturalsize(300, False, True)\n    '300B'\n    >>> naturalsize(3000, False, True)\n    '2.9K'\n    >>> naturalsize(3000, False, True, \"%.3f\")\n    '2.930K'\n    >>> naturalsize(3000, True)\n    '2.9 KiB'\n    >>> naturalsize(10**28)\n    '10.0 RB'\n    >>> naturalsize(10**34 * 3)\n    '30000.0 QB'\n    >>> naturalsize(-4096, True)\n    '-4.0 KiB'\n\n    ```\n\nArgs:\n    value (int, float, str): Integer to convert.\n    binary (bool): If `True`, uses binary suffixes (KiB, MiB) with base\n        2<sup>10</sup> instead of 10<sup>3</sup>.\n    gnu (bool): If `True`, the binary argument is ignored and GNU-style\n        (`ls -sh` style) prefixes are used (K, M) with the 2**10 definition.\n    format (str): Custom formatter.\n\nReturns:\n    str: Human readable representation of a filesize.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/i18n.py::_get_default_locale_path",
+      "path": "src/humanize/i18n.py",
+      "qualname": "_get_default_locale_path",
+      "signature": "def _get_default_locale_path() -> pathlib.Path | None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/i18n.py::get_translation",
+      "path": "src/humanize/i18n.py",
+      "qualname": "get_translation",
+      "signature": "def get_translation() -> gettext_module.NullTranslations",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/i18n.py::activate",
+      "path": "src/humanize/i18n.py",
+      "qualname": "activate",
+      "signature": "def activate(locale: str | None, path: str | os.PathLike[str] | None=None) -> gettext_module.NullTranslations",
+      "docstring": "Activate internationalisation.\n\nSet `locale` as current locale. Search for locale in directory `path`.\n\nArgs:\n    locale (str | None): Language name, e.g. `en_GB`. If `None`, defaults to no\n        translation. Similar to calling ``deactivate()``.\n    path (str | pathlib.Path): Path to search for locales.\n\nReturns:\n    dict: Translations.\n\nRaises:\n    FileNotFoundError: If humanize cannot find the locale folder.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/i18n.py::deactivate",
+      "path": "src/humanize/i18n.py",
+      "qualname": "deactivate",
+      "signature": "def deactivate() -> None",
+      "docstring": "Deactivate internationalisation.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/i18n.py::_gettext",
+      "path": "src/humanize/i18n.py",
+      "qualname": "_gettext",
+      "signature": "def _gettext(message: str) -> str",
+      "docstring": "Get translation.\n\nArgs:\n    message (str): Text to translate.\n\nReturns:\n    str: Translated text.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/i18n.py::_pgettext",
+      "path": "src/humanize/i18n.py",
+      "qualname": "_pgettext",
+      "signature": "def _pgettext(msgctxt: str, message: str) -> str",
+      "docstring": "Fetches a particular translation.\n\nIt works with `msgctxt` .po modifiers and allows duplicate keys with different\ntranslations.\n\nArgs:\n    msgctxt (str): Context of the translation.\n    message (str): Text to translate.\n\nReturns:\n    str: Translated text.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/i18n.py::_ngettext",
+      "path": "src/humanize/i18n.py",
+      "qualname": "_ngettext",
+      "signature": "def _ngettext(message: str, plural: str, num: int) -> str",
+      "docstring": "Plural version of _gettext.\n\nArgs:\n    message (str): Singular text to translate.\n    plural (str): Plural text to translate.\n    num (int): The number (e.g. item count) to determine translation for the\n        respective grammatical number.\n\nReturns:\n    str: Translated text.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/i18n.py::_gettext_noop",
+      "path": "src/humanize/i18n.py",
+      "qualname": "_gettext_noop",
+      "signature": "def _gettext_noop(message: str) -> str",
+      "docstring": "Mark a string as a translation string without translating it.\n\nExample usage:\n```python\nCONSTANTS = [_gettext_noop('first'), _gettext_noop('second')]\ndef num_name(n):\n    return _gettext(CONSTANTS[n])\n```\n\nArgs:\n    message (str): Text to translate in the future.\n\nReturns:\n    str: Original text, unchanged.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/i18n.py::_ngettext_noop",
+      "path": "src/humanize/i18n.py",
+      "qualname": "_ngettext_noop",
+      "signature": "def _ngettext_noop(singular: str, plural: str) -> tuple[str, str]",
+      "docstring": "Mark two strings as pluralized translations without translating them.\n\nExample usage:\n```python\nCONSTANTS = [ngettext_noop('first', 'firsts'), ngettext_noop('second', 'seconds')]\ndef num_name(n):\n    return _ngettext(*CONSTANTS[n])\n```\n\nArgs:\n    singular (str): Singular text to translate in the future.\n    plural (str): Plural text to translate in the future.\n\nReturns:\n    tuple: Original text, unchanged.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/i18n.py::_pgettext_noop",
+      "path": "src/humanize/i18n.py",
+      "qualname": "_pgettext_noop",
+      "signature": "def _pgettext_noop(msgctxt: str, message: str) -> tuple[str, str]",
+      "docstring": "Mark a contextual translation without translating it.\n\nArgs:\n    msgctxt (str): Context of the translation.\n    message (str): Text to translate in the future.\n\nReturns:\n    tuple: Original context and text, unchanged.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/i18n.py::thousands_separator",
+      "path": "src/humanize/i18n.py",
+      "qualname": "thousands_separator",
+      "signature": "def thousands_separator() -> str",
+      "docstring": "Return the thousands separator for a locale, default to comma.\n\nReturns:\n     str: Thousands separator.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/i18n.py::decimal_separator",
+      "path": "src/humanize/i18n.py",
+      "qualname": "decimal_separator",
+      "signature": "def decimal_separator() -> str",
+      "docstring": "Return the decimal separator for a locale, default to dot.\n\nReturns:\n     str: Decimal separator.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/lists.py::natural_list",
+      "path": "src/humanize/lists.py",
+      "qualname": "natural_list",
+      "signature": "def natural_list(items: Iterable[Any]) -> str",
+      "docstring": "Natural list.\n\nConvert an iterable of items into a human-readable string with commas and 'and'.\n\nExamples:\n    >>> natural_list([\"one\", \"two\", \"three\"])\n    'one, two and three'\n    >>> natural_list([\"one\", \"two\"])\n    'one and two'\n    >>> natural_list([\"one\"])\n    'one'\n\nArgs:\n    items (Iterable): An iterable of items.\n\nReturns:\n    str: A string with commas and 'and' in the right places.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/number.py::_format_not_finite",
+      "path": "src/humanize/number.py",
+      "qualname": "_format_not_finite",
+      "signature": "def _format_not_finite(value: float) -> str",
+      "docstring": "Utility function to handle infinite and nan cases.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/number.py::ordinal",
+      "path": "src/humanize/number.py",
+      "qualname": "ordinal",
+      "signature": "def ordinal(value: NumberOrString, gender: str='male') -> str",
+      "docstring": "Converts an integer to its ordinal as a string.\n\nFor example, 1 is \"1st\", 2 is \"2nd\", 3 is \"3rd\", etc. Works for any integer or\nanything `int()` will turn into an integer. Anything else will return the output\nof str(value).\n\nExamples:\n    ```pycon\n    >>> ordinal(1)\n    '1st'\n    >>> ordinal(1002)\n    '1002nd'\n    >>> ordinal(103)\n    '103rd'\n    >>> ordinal(4)\n    '4th'\n    >>> ordinal(12)\n    '12th'\n    >>> ordinal(101)\n    '101st'\n    >>> ordinal(111)\n    '111th'\n    >>> ordinal(\"something else\")\n    'something else'\n    >>> ordinal([1, 2, 3]) == \"[1, 2, 3]\"\n    True\n\n    ```\n\nArgs:\n    value (int, str, float): Integer to convert.\n    gender (str): Gender for translations. Accepts either \"male\" or \"female\".\n\nReturns:\n    str: Ordinal string.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/number.py::intcomma",
+      "path": "src/humanize/number.py",
+      "qualname": "intcomma",
+      "signature": "def intcomma(value: NumberOrString, ndigits: int | None=None) -> str",
+      "docstring": "Converts an integer to a string containing commas every three digits.\n\nFor example, 3000 becomes \"3,000\" and 45000 becomes \"45,000\". To maintain some\ncompatibility with Django's `intcomma`, this function also accepts floats.\n\nExamples:\n    ```pycon\n    >>> intcomma(100)\n    '100'\n    >>> intcomma(\"1000\")\n    '1,000'\n    >>> intcomma(1_000_000)\n    '1,000,000'\n    >>> intcomma(1_234_567.25)\n    '1,234,567.25'\n    >>> intcomma(1234.5454545, 2)\n    '1,234.55'\n    >>> intcomma(14308.40, 1)\n    '14,308.4'\n    >>> intcomma(\"14308.40\", 1)\n    '14,308.4'\n    >>> intcomma(None)\n    'None'\n\n    ```\n\nArgs:\n    value (int, float, str): Integer or float to convert.\n    ndigits (int, None): Digits of precision for rounding after the decimal point.\n\nReturns:\n    str: String containing commas every three digits.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/number.py::intword",
+      "path": "src/humanize/number.py",
+      "qualname": "intword",
+      "signature": "def intword(value: NumberOrString, format: str='%.1f') -> str",
+      "docstring": "Converts a large integer to a friendly text representation.\n\nWorks best for numbers over 1 million. For example, 1_000_000 becomes \"1.0 million\",\n1_200_000 becomes \"1.2 million\" and \"1_200_000_000\" becomes \"1.2 billion\". Supports\nup to decillion (33 digits) and googol (100 digits).\n\nExamples:\n    ```pycon\n    >>> intword(\"100\")\n    '100'\n    >>> intword(\"12400\")\n    '12.4 thousand'\n    >>> intword(\"1000000\")\n    '1.0 million'\n    >>> intword(1_200_000_000)\n    '1.2 billion'\n    >>> intword(8100000000000000000000000000000000)\n    '8.1 decillion'\n    >>> intword(None)\n    'None'\n    >>> intword(\"1234000\", \"%0.3f\")\n    '1.234 million'\n\n    ```\n\nArgs:\n    value (int, float, str): Integer to convert.\n    format (str): To change the number of decimal or general format of the number\n        portion.\n\nReturns:\n    str: Friendly text representation as a string, unless the value passed could not\n        be coaxed into an `int`.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/number.py::apnumber",
+      "path": "src/humanize/number.py",
+      "qualname": "apnumber",
+      "signature": "def apnumber(value: NumberOrString) -> str",
+      "docstring": "Converts an integer to Associated Press style.\n\nExamples:\n  ```pycon\n  >>> apnumber(0)\n  'zero'\n  >>> apnumber(5)\n  'five'\n  >>> apnumber(10)\n  '10'\n  >>> apnumber(\"7\")\n  'seven'\n  >>> apnumber(\"foo\")\n  'foo'\n  >>> apnumber(None)\n  'None'\n\n  ```\n\nArgs:\n    value (int, float, str): Integer to convert.\n\nReturns:\n    str: For numbers 0-9, the number spelled out. Otherwise, the number. This always\n        returns a string unless the value was not `int`-able, then `str(value)`\n        is returned.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/number.py::fractional",
+      "path": "src/humanize/number.py",
+      "qualname": "fractional",
+      "signature": "def fractional(value: NumberOrString) -> str",
+      "docstring": "Convert to fractional number.\n\nThere will be some cases where one might not want to show ugly decimal places for\nfloats and decimals.\n\nThis function returns a human-readable fractional number in form of fractions and\nmixed fractions.\n\nPass in a string, or a number or a float, and this function returns:\n\n* a string representation of a fraction\n* or a whole number\n* or a mixed fraction\n* or the str output of the value, if it could not be converted\n\nExamples:\n    ```pycon\n    >>> fractional(0.3)\n    '3/10'\n    >>> fractional(1.3)\n    '1 3/10'\n    >>> fractional(float(1/3))\n    '1/3'\n    >>> fractional(1)\n    '1'\n    >>> fractional(\"ten\")\n    'ten'\n    >>> fractional(None)\n    'None'\n\n    ```\n\nArgs:\n    value (int, float, str): Integer to convert.\n\nReturns:\n    str: Fractional number as a string.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/number.py::scientific",
+      "path": "src/humanize/number.py",
+      "qualname": "scientific",
+      "signature": "def scientific(value: NumberOrString, precision: int=2) -> str",
+      "docstring": "Return number in string scientific notation z.wq x 10\u207f.\n\nExamples:\n    ```pycon\n    >>> scientific(float(0.3))\n    '3.00 x 10\u207b\u00b9'\n    >>> scientific(int(500))\n    '5.00 x 10\u00b2'\n    >>> scientific(-1000)\n    '-1.00 x 10\u00b3'\n    >>> scientific(1000, 1)\n    '1.0 x 10\u00b3'\n    >>> scientific(1000, 3)\n    '1.000 x 10\u00b3'\n    >>> scientific(\"99\")\n    '9.90 x 10\u00b9'\n    >>> scientific(\"foo\")\n    'foo'\n    >>> scientific(None)\n    'None'\n\n    ```\n\nArgs:\n    value (int, float, str): Input number.\n    precision (int): Number of decimal for first part of the number.\n\nReturns:\n    str: Number in scientific notation z.wq x 10\u207f.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/number.py::clamp",
+      "path": "src/humanize/number.py",
+      "qualname": "clamp",
+      "signature": "def clamp(value: float, format: str='{:}', floor: float | None=None, ceil: float | None=None, floor_token: str='<', ceil_token: str='>') -> str",
+      "docstring": "Returns number with the specified format, clamped between floor and ceil.\n\nIf the number is larger than ceil or smaller than floor, then the respective limit\nwill be returned, formatted and prepended with a token specifying as such.\n\nExamples:\n    ```pycon\n    >>> clamp(123.456)\n    '123.456'\n    >>> clamp(0.0001, floor=0.01)\n    '<0.01'\n    >>> clamp(0.99, format=\"{:.0%}\", ceil=0.99)\n    '99%'\n    >>> clamp(0.999, format=\"{:.0%}\", ceil=0.99)\n    '>99%'\n    >>> clamp(1, format=intword, floor=1e6, floor_token=\"under \")\n    'under 1.0 million'\n    >>> clamp(None) is None\n    True\n\n    ```\n\nArgs:\n    value (int, float): Input number.\n    format (str OR callable): Can either be a formatting string, or a callable\n        function that receives value and returns a string.\n    floor (int, float): Smallest value before clamping.\n    ceil (int, float): Largest value before clamping.\n    floor_token (str): If value is smaller than floor, token will be prepended\n        to output.\n    ceil_token (str): If value is larger than ceil, token will be prepended\n        to output.\n\nReturns:\n    str: Formatted number. The output is clamped between the indicated floor and\n        ceil. If the number is larger than ceil or smaller than floor, the output\n        will be prepended with a token indicating as such.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/number.py::metric",
+      "path": "src/humanize/number.py",
+      "qualname": "metric",
+      "signature": "def metric(value: float, unit: str='', precision: int=3) -> str",
+      "docstring": "Return a value with a metric SI unit-prefix appended.\n\nExamples:\n    ```pycon\n    >>> metric(1500, \"V\")\n    '1.50 kV'\n    >>> metric(2e8, \"W\")\n    '200 MW'\n    >>> metric(220e-6, \"F\")\n    '220 \u03bcF'\n    >>> metric(1e-14, precision=4)\n    '10.00 f'\n\n    ```\n\nThe unit prefix is always chosen so that non-significant zero digits are required.\ni.e. `123,000` will become `123k` instead of `0.123M` and `1,230,000` will become\n`1.23M` instead of `1230K`. For numbers that are either too huge or too tiny to\nrepresent without resorting to either leading or trailing zeroes, it falls back to\n`scientific()`.\n```pycon\n>>> metric(1e40)\n'1.00 x 10\u2074\u2070'\n\n```\n\nArgs:\n    value (int, float): Input number.\n    unit (str): Optional base unit.\n    precision (int): The number of digits the output should contain.\n\nReturns:\n    str:",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::Unit",
+      "path": "src/humanize/time.py",
+      "qualname": "Unit",
+      "signature": "class Unit(Enum)",
+      "docstring": null,
+      "decorators": [
+        "total_ordering"
+      ]
+    },
+    {
+      "id": "src/humanize/time.py::Unit.__lt__",
+      "path": "src/humanize/time.py",
+      "qualname": "Unit.__lt__",
+      "signature": "def __lt__(self, other: Any) -> Any",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::_now",
+      "path": "src/humanize/time.py",
+      "qualname": "_now",
+      "signature": "def _now() -> dt.datetime",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::_abs_timedelta",
+      "path": "src/humanize/time.py",
+      "qualname": "_abs_timedelta",
+      "signature": "def _abs_timedelta(delta: dt.timedelta) -> dt.timedelta",
+      "docstring": "Return an \"absolute\" value for a timedelta, always representing a time distance.\n\nArgs:\n    delta (datetime.timedelta): Input timedelta.\n\nReturns:\n    datetime.timedelta: Absolute timedelta.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::_date_and_delta",
+      "path": "src/humanize/time.py",
+      "qualname": "_date_and_delta",
+      "signature": "def _date_and_delta(value: Any, *, now: dt.datetime | None=None, precise: bool=False) -> tuple[Any, Any]",
+      "docstring": "Turn a value into a date and a timedelta which represents how long ago it was.\n\nIf that's not possible, return `(None, value)`.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::naturaldelta",
+      "path": "src/humanize/time.py",
+      "qualname": "naturaldelta",
+      "signature": "def naturaldelta(value: dt.timedelta | float, months: bool=True, minimum_unit: str='seconds') -> str",
+      "docstring": "Return a natural representation of a timedelta or number of seconds.\n\nThis is similar to `naturaltime`, but does not add tense to the result.\n\nThe timedelta will be rounded to the nearest unit that makes sense.\n\nArgs:\n    value (datetime.timedelta, int or float): A timedelta or a number of seconds.\n    months (bool): If `True`, then a number of months (based on 30.5 days) will be\n        used for fuzziness between years.\n    minimum_unit (str): The lowest unit that can be used.\n\nReturns:\n    str (str or `value`): A natural representation of the amount of time\n        elapsed unless `value` is not datetime.timedelta or cannot be\n        converted to int (cannot be float due to 'inf' or 'nan').\n        In that case, a `value` is returned unchanged.\n\nRaises:\n    OverflowError: If `value` is too large to convert to datetime.timedelta.\n\nExamples:\n    Compare two timestamps in a custom local timezone::\n\n    ```pycon\n    >>> import datetime as dt\n    >>> from dateutil.tz import gettz\n\n    >>> berlin = gettz(\"Europe/Berlin\")\n    >>> now = dt.datetime.now(tz=berlin)\n    >>> later = now + dt.timedelta(minutes=30)\n\n    >>> naturaldelta(later - now)\n    '30 minutes'\n\n    ```",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::naturaltime",
+      "path": "src/humanize/time.py",
+      "qualname": "naturaltime",
+      "signature": "def naturaltime(value: dt.datetime | dt.timedelta | float, future: bool=False, months: bool=True, minimum_unit: str='seconds', when: dt.datetime | None=None) -> str",
+      "docstring": "Return a natural representation of a time in a resolution that makes sense.\n\nThis is more or less compatible with Django's `naturaltime` filter.\n\nThe time will be rounded to the nearest unit that makes sense.\n\nArgs:\n    value (datetime.datetime, datetime.timedelta, int or float): A `datetime`, a\n        `timedelta`, or a number of seconds.\n    future (bool): Ignored for `datetime`s and `timedelta`s, where the tense is\n        always figured out based on the current time. For integers and floats, the\n        return value will be past tense by default, unless future is `True`.\n    months (bool): If `True`, then a number of months (based on 30.5 days) will be\n        used for fuzziness between years.\n    minimum_unit (str): The lowest unit that can be used.\n    when (datetime.datetime): Point in time relative to which _value_ is\n        interpreted.  Defaults to the current time in the local timezone.\n\nReturns:\n    str: A natural representation of the input in a resolution that makes sense.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::_convert_aware_datetime",
+      "path": "src/humanize/time.py",
+      "qualname": "_convert_aware_datetime",
+      "signature": "def _convert_aware_datetime(value: dt.datetime | dt.timedelta | float | None) -> Any",
+      "docstring": "Convert aware datetime to naive datetime and pass through any other type.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::naturalday",
+      "path": "src/humanize/time.py",
+      "qualname": "naturalday",
+      "signature": "def naturalday(value: dt.date | dt.datetime, format: str='%b %d') -> str",
+      "docstring": "Return a natural day.\n\nFor date values that are tomorrow, today or yesterday compared to\npresent day return representing string. Otherwise, return a string\nformatted according to `format`.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::naturaldate",
+      "path": "src/humanize/time.py",
+      "qualname": "naturaldate",
+      "signature": "def naturaldate(value: dt.date | dt.datetime) -> str",
+      "docstring": "Like `naturalday`, but append a year for dates more than ~five months away.",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::_quotient_and_remainder",
+      "path": "src/humanize/time.py",
+      "qualname": "_quotient_and_remainder",
+      "signature": "def _quotient_and_remainder(value: float, divisor: float, unit: Unit, minimum_unit: Unit, suppress: Iterable[Unit], format: str) -> tuple[float, float]",
+      "docstring": "Divide `value` by `divisor`, returning the quotient and remainder.\n\nIf `unit` is `minimum_unit`, the quotient will be the rounding of `value / divisor`\naccording to the `format` string and the remainder will be zero. The rationale is\nthat if `unit` is the unit of the quotient, we cannot represent the remainder\nbecause it would require a unit smaller than the `minimum_unit`.\n\n>>> from humanize.time import _quotient_and_remainder, Unit\n>>> _quotient_and_remainder(36, 24, Unit.DAYS, Unit.DAYS, [], \"%0.2f\")\n(1.5, 0)\n\nIf `unit` is in `suppress`, the quotient will be zero and the remainder will be the\ninitial value. The idea is that if we cannot use `unit`, we are forced to use a\nlower unit, so we cannot do the division.\n\n>>> _quotient_and_remainder(36, 24, Unit.DAYS, Unit.HOURS, [Unit.DAYS], \"%0.2f\")\n(0, 36)\n\nIn other cases, return the quotient and remainder as `divmod` would do it.\n\n>>> _quotient_and_remainder(36, 24, Unit.DAYS, Unit.HOURS, [], \"%0.2f\")\n(1, 12)",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::_suitable_minimum_unit",
+      "path": "src/humanize/time.py",
+      "qualname": "_suitable_minimum_unit",
+      "signature": "def _suitable_minimum_unit(min_unit: Unit, suppress: Iterable[Unit]) -> Unit",
+      "docstring": "Return a minimum unit suitable that is not suppressed.\n\nIf not suppressed, return the same unit:\n\n>>> from humanize.time import _suitable_minimum_unit, Unit\n>>> _suitable_minimum_unit(Unit.HOURS, []).name\n'HOURS'\n\nBut if suppressed, find a unit greater than the original one that is not\nsuppressed:\n\n>>> _suitable_minimum_unit(Unit.HOURS, [Unit.HOURS]).name\n'DAYS'\n\n>>> _suitable_minimum_unit(Unit.HOURS, [Unit.HOURS, Unit.DAYS]).name\n'MONTHS'",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::_suppress_lower_units",
+      "path": "src/humanize/time.py",
+      "qualname": "_suppress_lower_units",
+      "signature": "def _suppress_lower_units(min_unit: Unit, suppress: Iterable[Unit]) -> set[Unit]",
+      "docstring": "Extend suppressed units (if any) with all units lower than the minimum unit.\n\n>>> from humanize.time import _suppress_lower_units, Unit\n>>> [x.name for x in sorted(_suppress_lower_units(Unit.SECONDS, [Unit.DAYS]))]\n['MICROSECONDS', 'MILLISECONDS', 'DAYS']",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::precisedelta",
+      "path": "src/humanize/time.py",
+      "qualname": "precisedelta",
+      "signature": "def precisedelta(value: dt.timedelta | float | None, minimum_unit: str='seconds', suppress: Iterable[str]=(), format: str='%0.2f') -> str",
+      "docstring": "Return a precise representation of a timedelta or number of seconds.\n\n```pycon\n>>> import datetime as dt\n>>> from humanize.time import precisedelta\n\n>>> delta = dt.timedelta(seconds=3633, days=2, microseconds=123000)\n>>> precisedelta(delta)\n'2 days, 1 hour and 33.12 seconds'\n\n```\n\nA custom `format` can be specified to control how the fractional part\nis represented:\n\n```pycon\n>>> precisedelta(delta, format=\"%0.4f\")\n'2 days, 1 hour and 33.1230 seconds'\n\n```\n\nInstead, the `minimum_unit` can be changed to have a better resolution;\nthe function will still readjust the unit to use the greatest of the\nunits that does not lose precision.\n\nFor example setting microseconds but still representing the date with milliseconds:\n\n```pycon\n>>> precisedelta(delta, minimum_unit=\"microseconds\")\n'2 days, 1 hour, 33 seconds and 123 milliseconds'\n\n```\n\nIf desired, some units can be suppressed: you will not see them represented and the\ntime of the other units will be adjusted to keep representing the same timedelta:\n\n```pycon\n>>> precisedelta(delta, suppress=['days'])\n'49 hours and 33.12 seconds'\n\n```\n\nNote that microseconds precision is lost if the seconds and all\nthe units below are suppressed:\n\n```pycon\n>>> delta = dt.timedelta(seconds=90, microseconds=100)\n>>> precisedelta(delta, suppress=['seconds', 'milliseconds', 'microseconds'])\n'1.50 minutes'\n\n```\n\nIf the delta is too small to be represented with the minimum unit,\na value of zero will be returned:\n\n```pycon\n>>> delta = dt.timedelta(seconds=1)\n>>> precisedelta(delta, minimum_unit=\"minutes\")\n'0.02 minutes'\n\n>>> delta = dt.timedelta(seconds=0.1)\n>>> precisedelta(delta, minimum_unit=\"minutes\")\n'0 minutes'\n\n```",
+      "decorators": []
+    },
+    {
+      "id": "src/humanize/time.py::_rounding_by_fmt",
+      "path": "src/humanize/time.py",
+      "qualname": "_rounding_by_fmt",
+      "signature": "def _rounding_by_fmt(format: str, value: float) -> float | int",
+      "docstring": "Round a number according to the string format provided.\n\nThe string format is the old printf-style string formatting.\n\nIf we are using a format which truncates the value, such as \"%d\" or \"%i\", the\nreturned value will be of type `int`.\n\nIf we are using a format which rounds the value, such as \"%.2f\" or even \"%.0f\",\nwe will return a float.",
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::_warmup_i18n",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "_warmup_i18n",
+      "signature": "def _warmup_i18n() -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.fixture(scope='session', autouse=True)"
+      ]
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_apnumber",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_apnumber",
+      "signature": "def test_apnumber(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_clamp",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_clamp",
+      "signature": "def test_clamp(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_fractional",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_fractional",
+      "signature": "def test_fractional(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_intcomma",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_intcomma",
+      "signature": "def test_intcomma(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_intword",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_intword",
+      "signature": "def test_intword(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_metric",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_metric",
+      "signature": "def test_metric(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_natural_list",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_natural_list",
+      "signature": "def test_natural_list(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_naturaldate",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_naturaldate",
+      "signature": "def test_naturaldate(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_naturalday",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_naturalday",
+      "signature": "def test_naturalday(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_naturaldelta",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_naturaldelta",
+      "signature": "def test_naturaldelta(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_naturalsize",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_naturalsize",
+      "signature": "def test_naturalsize(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_naturaltime",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_naturaltime",
+      "signature": "def test_naturaltime(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_ordinal",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_ordinal",
+      "signature": "def test_ordinal(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_precisedelta",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_precisedelta",
+      "signature": "def test_precisedelta(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_benchmarks.py::test_scientific",
+      "path": "tests/test_benchmarks.py",
+      "qualname": "test_scientific",
+      "signature": "def test_scientific(benchmark: BenchmarkFixture) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_filesize.py::test_naturalsize",
+      "path": "tests/test_filesize.py",
+      "qualname": "test_naturalsize",
+      "signature": "def test_naturalsize(test_args: list[int] | list[int | bool], expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('test_args, expected', [([300], '300 Bytes'), (['1000'], '1.0 kB'), ([10 ** 3], '1.0 kB'), ([10 ** 6], '1.0 MB'), ([10 ** 9], '1.0 GB'), ([10 ** 12], '1.0 TB'), ([10 ** 15], '1.0 PB'), ([10 ** 18], '1.0 EB'), ([10 ** 21], '1.0 ZB'), ([10 ** 24], '1.0 YB'), ([10 ** 27], '1.0 RB'), ([10 ** 30], '1.0 QB'), ([1000 ** 1 * 31], '31.0 kB'), ([1000 ** 2 * 32], '32.0 MB'), ([1000 ** 3 * 33], '33.0 GB'), ([1000 ** 4 * 34], '34.0 TB'), ([1000 ** 5 * 35], '35.0 PB'), ([1000 ** 6 * 36], '36.0 EB'), ([1000 ** 7 * 37], '37.0 ZB'), ([1000 ** 8 * 38], '38.0 YB'), ([1000 ** 9 * 39], '39.0 RB'), ([1000 ** 10 * 40], '40.0 QB'), ([300, True], '300 Bytes'), ([1024 ** 1 * 31, True], '31.0 KiB'), ([1024 ** 2 * 32, True], '32.0 MiB'), ([1024 ** 3 * 33, True], '33.0 GiB'), ([1024 ** 4 * 34, True], '34.0 TiB'), ([1024 ** 5 * 35, True], '35.0 PiB'), ([1024 ** 6 * 36, True], '36.0 EiB'), ([1024 ** 7 * 37, True], '37.0 ZiB'), ([1024 ** 8 * 38, True], '38.0 YiB'), ([1024 ** 9 * 39, True], '39.0 RiB'), ([1024 ** 10 * 40, True], '40.0 QiB'), ([1000 ** 1 * 31, True], '30.3 KiB'), ([1000 ** 2 * 32, True], '30.5 MiB'), ([1000 ** 3 * 33, True], '30.7 GiB'), ([1000 ** 4 * 34, True], '30.9 TiB'), ([1000 ** 5 * 35, True], '31.1 PiB'), ([1000 ** 6 * 36, True], '31.2 EiB'), ([1000 ** 7 * 37, True], '31.3 ZiB'), ([1000 ** 8 * 38, True], '31.4 YiB'), ([1000 ** 9 * 39, True], '31.5 RiB'), ([1000 ** 10 * 40, True], '31.6 QiB'), ([1000 ** 1 * 31, False, True], '30.3K'), ([1000 ** 2 * 32, False, True], '30.5M'), ([1000 ** 3 * 33, False, True], '30.7G'), ([1000 ** 4 * 34, False, True], '30.9T'), ([1000 ** 5 * 35, False, True], '31.1P'), ([1000 ** 6 * 36, False, True], '31.2E'), ([1000 ** 7 * 37, False, True], '31.3Z'), ([1000 ** 8 * 38, False, True], '31.4Y'), ([1000 ** 9 * 39, False, True], '31.5R'), ([1000 ** 10 * 40, False, True], '31.6Q'), ([300, False, True], '300B'), ([3000, False, True], '2.9K'), ([3000000, False, True], '2.9M'), ([1024, False, True], '1.0K'), ([1, False, False], '1 Byte'), ([1.0, False, False], '1 Byte'), (['1', False, False], '1 Byte'), ([3141592, False, False, '%.2f'], '3.14 MB'), ([3000, False, True, '%.3f'], '2.930K'), ([3000000000, False, True, '%.0f'], '3G'), ([10 ** 26 * 30, True, False, '%.3f'], '2.423 RiB'), ([1.123456789], '1 Bytes'), ([1.123456789 * 10 ** 3], '1.1 kB'), ([1.123456789 * 10 ** 6], '1.1 MB'), ([1.123456789, False, True], '1B'), ([1.123456789 * 10 ** 3, False, True], '1.1K'), ([1.123456789 * 10 ** 6, False, True], '1.1M'), ([999999], '1.0 MB'), ([999999999], '1.0 GB'), ([999999999999], '1.0 TB'), ([1024 ** 2 - 1, True], '1.0 MiB'), ([1024 ** 3 - 1, True], '1.0 GiB'), ([1024 ** 2 - 1, False, True], '1.0M')])"
+      ]
+    },
+    {
+      "id": "tests/test_i18n.py::test_update_translations",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_update_translations",
+      "signature": "def test_update_translations(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, locale: str, one: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('locale, one', [('de_DE', 'eins'), ('fr_FR', 'un')])"
+      ]
+    },
+    {
+      "id": "tests/test_i18n.py::test_i18n",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_i18n",
+      "signature": "def test_i18n() -> None",
+      "docstring": null,
+      "decorators": [
+        "freeze_time('2020-02-02')"
+      ]
+    },
+    {
+      "id": "tests/test_i18n.py::test_intcomma",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_intcomma",
+      "signature": "def test_intcomma() -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_i18n.py::test_naturaldelta",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_naturaldelta",
+      "signature": "def test_naturaldelta() -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_i18n.py::test_intword_i18n",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_intword_i18n",
+      "signature": "def test_intword_i18n(locale: str, number: int, expected_result: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('locale, number, expected_result', [('it_IT', 1000000, '1,0 milione'), ('it_IT', 1200000, '1,2 milioni'), ('it_IT', 1000000000, '1,0 miliardo'), ('it_IT', 3500000000, '3,5 miliardi'), ('si_LK', 1000000, '1.0 \u0db8\u0dd2\u0dbd\u0dd2\u0dba\u0db1'), ('si_LK', 1200000, '1.2 \u0db8\u0dd2\u0dbd\u0dd2\u0dba\u0db1'), ('si_LK', 3500000000, '3.5 \u0db6\u0dd2\u0dbd\u0dd2\u0dba\u0db1'), ('es_ES', 1000000, '1.0 mill\u00f3n'), ('es_ES', 3500000, '3.5 millones'), ('es_ES', 1000000000, '1.0 mil millones'), ('es_ES', 1200000000, '1.2 miles de millones'), ('es_ES', 1000000000000, '1.0 bill\u00f3n'), ('es_ES', 6700000000000, '6.7 billones'), ('lv', 1000, '1,0 t\u016bkstotis'), ('lv', 1200, '1,2 t\u016bksto\u0161i'), ('lv', 2000, '2,0 t\u016bksto\u0161i'), ('lv', 11000, '11,0 t\u016bksto\u0161i'), ('lv', 21000, '21,0 t\u016bkstotis'), ('lv', 1000000, '1,0 miljons'), ('lv', 2000000, '2,0 miljoni'), ('lv', 11000000, '11,0 miljoni'), ('lv', 21000000, '21,0 miljons'), ('fr_FR', '1_000', '1,0 mille'), ('fr_FR', '12_400', '12,4 milles'), ('fr_FR', '12_490', '12,5 milles'), ('fr_FR', '1_000_000', '1,0 million'), ('fr_FR', '-1_000_000', '-1,0 million'), ('fr_FR', '1_200_000', '1,2 millions'), ('fr_FR', '1_290_000', '1,3 millions'), ('fr_FR', '999_999_999', '1,0 milliard'), ('fr_FR', '1_000_000_000', '1,0 milliard'), ('fr_FR', '-1_000_000_000', '-1,0 milliard'), ('fr_FR', '2_000_000_000', '2,0 milliards'), ('fr_FR', '999_999_999_999', '1,0 billion'), ('fr_FR', '1_000_000_000_000', '1,0 billion'), ('fr_FR', '6_000_000_000_000', '6,0 billions'), ('fr_FR', '-6_000_000_000_000', '-6,0 billions'), ('fr_FR', '999_999_999_999_999', '1,0 billiard'), ('fr_FR', '1_000_000_000_000_000', '1,0 billiard'), ('fr_FR', '1_300_000_000_000_000', '1,3 billiards'), ('fr_FR', '-1_300_000_000_000_000', '-1,3 billiards'), ('fr_FR', '3_500_000_000_000_000_000_000', '3,5 trilliards'), ('fr_FR', '8_100_000_000_000_000_000_000_000_000_000_000', '8,1 quintilliards'), ('fr_FR', '-8_100_000_000_000_000_000_000_000_000_000_000', '-8,1 quintilliards'), ('fr_FR', 1000000000000000000000000000000000000, '1000,0 quintilliards'), ('fr_FR', 1100000000000000000000000000000000000, '1100,0 quintilliards'), ('fr_FR', 2100000000000000000000000000000000000, '2100,0 quintilliards')])"
+      ]
+    },
+    {
+      "id": "tests/test_i18n.py::test_naturalsize_i18n",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_naturalsize_i18n",
+      "signature": "def test_naturalsize_i18n(locale: str, value: float, expected_result: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('locale, value, expected_result', [('fr_FR', 1, '1 octet'), ('fr_FR', 42, '42 octets'), ('si_LK', 1, '\u0db6\u0dba\u0dd2\u0da7\u0dca 1'), ('si_LK', 42, '\u0db6\u0dba\u0dd2\u0da7\u0dca 42'), ('fr_FR', 42000, '42.0 Ko'), ('fr_FR', 42000000, '42.0 Mo'), ('fr_FR', 42000000000, '42.0 Go'), ('fr_FR', -42000, '-42.0 Ko')])"
+      ]
+    },
+    {
+      "id": "tests/test_i18n.py::test_naturalsize_i18n_binary",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_naturalsize_i18n_binary",
+      "signature": "def test_naturalsize_i18n_binary() -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_i18n.py::test_langauge_codes",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_langauge_codes",
+      "signature": "def test_langauge_codes(locale: str, expected_result: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('locale, expected_result', [('ar', '5 \u062e\u0627\u0645\u0633'), ('ar_SA', '5 \u062e\u0627\u0645\u0633'), ('fr', '5e'), ('fr_FR', '5e'), ('pt', '5\u00ba'), ('pt_BR', '5\u00ba'), ('pt_PT', '5\u00ba')])"
+      ]
+    },
+    {
+      "id": "tests/test_i18n.py::test_ordinal_genders",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_ordinal_genders",
+      "signature": "def test_ordinal_genders(locale: str, number: int, gender: str, expected_result: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('locale, number, gender, expected_result', [('fr_FR', 1, 'male', '1er'), ('fr_FR', 1, 'female', '1\u00e8re'), ('fr_FR', 2, 'male', '2e'), ('es_ES', 1, 'male', '1\u00ba'), ('es_ES', 5, 'female', '5\u00aa'), ('it_IT', 3, 'male', '3\u00ba'), ('it_IT', 8, 'female', '8\u00aa')])"
+      ]
+    },
+    {
+      "id": "tests/test_i18n.py::test_default_locale_path_defined__spec__",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_default_locale_path_defined__spec__",
+      "signature": "def test_default_locale_path_defined__spec__() -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_i18n.py::test_default_locale_path_none__spec__",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_default_locale_path_none__spec__",
+      "signature": "def test_default_locale_path_none__spec__(monkeypatch: pytest.MonkeyPatch) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_i18n.py::test_default_locale_path_undefined__file__",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_default_locale_path_undefined__file__",
+      "signature": "def test_default_locale_path_undefined__file__(monkeypatch: pytest.MonkeyPatch) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_i18n.py::TestActivate",
+      "path": "tests/test_i18n.py",
+      "qualname": "TestActivate",
+      "signature": "class TestActivate",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_i18n.py::TestActivate.test_default_locale_path_null__spec__",
+      "path": "tests/test_i18n.py",
+      "qualname": "TestActivate.test_default_locale_path_null__spec__",
+      "signature": "def test_default_locale_path_null__spec__(self, monkeypatch: pytest.MonkeyPatch) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_i18n.py::TestActivate.test_default_locale_path_undefined__spec__",
+      "path": "tests/test_i18n.py",
+      "qualname": "TestActivate.test_default_locale_path_undefined__spec__",
+      "signature": "def test_default_locale_path_undefined__spec__(self, monkeypatch: pytest.MonkeyPatch) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_i18n.py::TestActivate.test_en_locale",
+      "path": "tests/test_i18n.py",
+      "qualname": "TestActivate.test_en_locale",
+      "signature": "def test_en_locale(self) -> None",
+      "docstring": null,
+      "decorators": [
+        "freeze_time('2020-02-02')"
+      ]
+    },
+    {
+      "id": "tests/test_i18n.py::TestActivate.test_none_locale",
+      "path": "tests/test_i18n.py",
+      "qualname": "TestActivate.test_none_locale",
+      "signature": "def test_none_locale(self) -> None",
+      "docstring": null,
+      "decorators": [
+        "freeze_time('2020-02-02')"
+      ]
+    },
+    {
+      "id": "tests/test_i18n.py::test_intword_unit_has_no_format_placeholder",
+      "path": "tests/test_i18n.py",
+      "qualname": "test_intword_unit_has_no_format_placeholder",
+      "signature": "def test_intword_unit_has_no_format_placeholder(locale: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('locale', sorted((p.name for p in LOCALE_DIR.iterdir() if p.is_dir())))"
+      ]
+    },
+    {
+      "id": "tests/test_lists.py::test_natural_list",
+      "path": "tests/test_lists.py",
+      "qualname": "test_natural_list",
+      "signature": "def test_natural_list(test_args: Iterable[Any], expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('test_args, expected', [([['1', '2', '3']], '1, 2 and 3'), ([['one', 'two', 'three']], 'one, two and three'), ([['one', 'two']], 'one and two'), ([['one']], 'one'), ([[]], ''), ([['']], ''), ([[1, 2, 3]], '1, 2 and 3'), ([[1, 'two']], '1 and two'), ([('one', 'two', 'three')], 'one, two and three'), ([('one', 'two')], 'one and two'), ([('one',)], 'one'), ([{'one': 1, 'two': 2}.keys()], 'one and two'), ([(x for x in ['one', 'two', 'three'])], 'one, two and three'), ([range(1, 4)], '1, 2 and 3')])"
+      ]
+    },
+    {
+      "id": "tests/test_number.py::test_ordinal",
+      "path": "tests/test_number.py",
+      "qualname": "test_ordinal",
+      "signature": "def test_ordinal(test_input: str, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('test_input, expected', [('1', '1st'), ('2', '2nd'), ('3', '3rd'), ('4', '4th'), ('11', '11th'), ('12', '12th'), ('13', '13th'), ('101', '101st'), ('102', '102nd'), ('103', '103rd'), ('111', '111th'), ('something else', 'something else'), (None, 'None'), (math.nan, 'NaN'), (math.inf, '+Inf'), (-math.inf, '-Inf'), ('nan', 'NaN'), ('-inf', '-Inf')])"
+      ]
+    },
+    {
+      "id": "tests/test_number.py::test_intcomma",
+      "path": "tests/test_number.py",
+      "qualname": "test_intcomma",
+      "signature": "def test_intcomma(test_args: list[int] | list[float] | list[str], expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('test_args, expected', [([100], '100'), ([1000], '1,000'), ([10123], '10,123'), ([10311], '10,311'), ([1000000], '1,000,000'), ([1234567.25], '1,234,567.25'), (['100'], '100'), (['1000'], '1,000'), (['10123'], '10,123'), (['10311'], '10,311'), (['1000000'], '1,000,000'), (['1234567.1234567'], '1,234,567.1234567'), (['1234567.1234567', 0], '1,234,567'), (['1234567.1234567', 1], '1,234,567.1'), (['1234567.1234567', 10], '1,234,567.1234567000'), (['1234567', 1], '1,234,567.0'), ([None], 'None'), ([14308.4], '14,308.4'), ([14308.4, None], '14,308.4'), ([14308.4, 1], '14,308.4'), ([14308.4, 2], '14,308.40'), ([14308.4, 3], '14,308.400'), ([1234.5454545], '1,234.5454545'), ([1234.5454545, None], '1,234.5454545'), ([1234.5454545, 0], '1,235'), ([1234.5454545, 1], '1,234.5'), ([1234.5454545, 2], '1,234.55'), ([1234.5454545, 3], '1,234.545'), ([1234.5454545, 10], '1,234.5454545000'), ([math.nan], 'NaN'), ([math.inf], '+Inf'), ([-math.inf], '-Inf'), (['nan'], 'NaN'), (['-inf'], '-Inf')])"
+      ]
+    },
+    {
+      "id": "tests/test_number.py::test_intcomma_large_integer",
+      "path": "tests/test_number.py",
+      "qualname": "test_intcomma_large_integer",
+      "signature": "def test_intcomma_large_integer(sign: int) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('sign', [1, -1])"
+      ]
+    },
+    {
+      "id": "tests/test_number.py::test_intword_powers",
+      "path": "tests/test_number.py",
+      "qualname": "test_intword_powers",
+      "signature": "def test_intword_powers() -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_number.py::test_intword",
+      "path": "tests/test_number.py",
+      "qualname": "test_intword",
+      "signature": "def test_intword(test_args: list[str], expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('test_args, expected', [(['0'], '0'), (['100'], '100'), (['-100'], '-100'), (['1000'], '1.0 thousand'), (['12400'], '12.4 thousand'), (['12490'], '12.5 thousand'), (['1000000'], '1.0 million'), (['-1000000'], '-1.0 million'), (['1200000'], '1.2 million'), (['1290000'], '1.3 million'), (['999999999'], '1.0 billion'), (['1000000000'], '1.0 billion'), (['-1000000000'], '-1.0 billion'), (['2000000000'], '2.0 billion'), (['999999999999'], '1.0 trillion'), (['1000000000000'], '1.0 trillion'), (['6000000000000'], '6.0 trillion'), (['-6000000000000'], '-6.0 trillion'), (['999999999999999'], '1.0 quadrillion'), (['1000000000000000'], '1.0 quadrillion'), (['1300000000000000'], '1.3 quadrillion'), (['-1300000000000000'], '-1.3 quadrillion'), (['3500000000000000000000'], '3.5 sextillion'), (['8100000000000000000000000000000000'], '8.1 decillion'), (['-8100000000000000000000000000000000'], '-8.1 decillion'), ([1000000000000000000000000000000000000], '1000.0 decillion'), ([1100000000000000000000000000000000000], '1100.0 decillion'), ([2100000000000000000000000000000000000], '2100.0 decillion'), ([2e+100], '2.0 googol'), ([None], 'None'), (['1230000', '%0.2f'], '1.23 million'), ([10 ** 100], '1.0 googol'), ([10 ** 101], '10.0 googol'), ([math.nan], 'NaN'), ([math.inf], '+Inf'), ([-math.inf], '-Inf'), (['nan'], 'NaN'), (['-inf'], '-Inf'), (['1234567', '%.0f'], '1 million'), (['1234567', '%.1f'], '1.2 million'), (['1234567', '%.2f'], '1.23 million'), (['1234567', '%.3f'], '1.235 million'), (['999500', '%.0f'], '1 million'), (['999499', '%.0f'], '999 thousand')])"
+      ]
+    },
+    {
+      "id": "tests/test_number.py::test_intword_rounding_rollover",
+      "path": "tests/test_number.py",
+      "qualname": "test_intword_rounding_rollover",
+      "signature": "def test_intword_rounding_rollover() -> None",
+      "docstring": "Values that round up to the next power must carry to the next unit.\n\nRegression: for magnitudes above ~10**22 the carry was checked in floating\npoint (``rounded_value * power == powers[ordinal + 1]``) and no longer\nmatched the exact integer power, so e.g. ``10**24 - 1`` was rendered as\n\"1000.0 sextillion\" instead of \"1.0 septillion\".",
+      "decorators": []
+    },
+    {
+      "id": "tests/test_number.py::test_apnumber",
+      "path": "tests/test_number.py",
+      "qualname": "test_apnumber",
+      "signature": "def test_apnumber(test_input: int | str, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('test_input, expected', [(0, 'zero'), (1, 'one'), (2, 'two'), (4, 'four'), (5, 'five'), (9, 'nine'), (10, '10'), ('7', 'seven'), (None, 'None'), (math.nan, 'NaN'), (math.inf, '+Inf'), (-math.inf, '-Inf'), ('nan', 'NaN'), ('-inf', '-Inf')])"
+      ]
+    },
+    {
+      "id": "tests/test_number.py::test_fractional",
+      "path": "tests/test_number.py",
+      "qualname": "test_fractional",
+      "signature": "def test_fractional(test_input: float | str, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('test_input, expected', [(1, '1'), (2.0, '2'), (4.0 / 3.0, '1 1/3'), (5.0 / 6.0, '5/6'), ('7', '7'), ('8.9', '8 9/10'), ('ten', 'ten'), (None, 'None'), (1 / 3, '1/3'), (1.5, '1 1/2'), (0.3, '3/10'), (0.333, '333/1000'), (math.nan, 'NaN'), (math.inf, '+Inf'), (-math.inf, '-Inf'), ('nan', 'NaN'), ('-inf', '-Inf'), (-1.3, '-1 3/10'), (-2.5, '-2 1/2'), (-0.5, '-1/2'), (0, '0'), (0.0, '0'), (2.9999999, '3'), (0.9999999, '1'), (-2.9999999, '-3')])"
+      ]
+    },
+    {
+      "id": "tests/test_number.py::test_scientific",
+      "path": "tests/test_number.py",
+      "qualname": "test_scientific",
+      "signature": "def test_scientific(test_args: list[typing.Any], expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('test_args, expected', [([1000], '1.00 x 10\u00b3'), ([-1000], '-1.00 x 10\u00b3'), ([5.5], '5.50 x 10\u2070'), ([5781651000], '5.78 x 10\u2079'), (['1000'], '1.00 x 10\u00b3'), (['99'], '9.90 x 10\u00b9'), ([0.3], '3.00 x 10\u207b\u00b9'), (['foo'], 'foo'), ([None], 'None'), ([1000, 1], '1.0 x 10\u00b3'), ([0.3, 1], '3.0 x 10\u207b\u00b9'), ([1000, 0], '1 x 10\u00b3'), ([0.3, 0], '3 x 10\u207b\u00b9'), ([1e+20], '1.00 x 10\u00b2\u2070'), ([2e-20], '2.00 x 10\u207b\u00b2\u2070'), ([-3e+20], '-3.00 x 10\u00b2\u2070'), ([-4e-20], '-4.00 x 10\u207b\u00b2\u2070'), ([math.nan], 'NaN'), ([math.inf], '+Inf'), ([-math.inf], '-Inf'), (['nan'], 'NaN'), (['-inf'], '-Inf')])"
+      ]
+    },
+    {
+      "id": "tests/test_number.py::test_clamp",
+      "path": "tests/test_number.py",
+      "qualname": "test_clamp",
+      "signature": "def test_clamp(test_args: list[typing.Any], expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('test_args, expected', [([1], '1'), ([None], None), ([0.0001, '{:.0%}'], '0%'), ([0.0001, '{:.0%}', 0.01], '<1%'), ([0.9999, '{:.0%}', None, 0.99], '>99%'), ([0.0001, '{:.0%}', 0.01, None, 'under ', None], 'under 1%'), ([0.9999, '{:.0%}', None, 0.99, None, 'above '], 'above 99%'), ([1, humanize.intword, 1000000.0, None, 'under '], 'under 1.0 million'), ([math.nan], 'NaN'), ([math.inf], '+Inf'), ([-math.inf], '-Inf')])"
+      ]
+    },
+    {
+      "id": "tests/test_number.py::test_metric",
+      "path": "tests/test_number.py",
+      "qualname": "test_metric",
+      "signature": "def test_metric(test_args: list[typing.Any], expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('test_args, expected', [([0], '0.00'), ([1, 'Hz'], '1.00 Hz'), ([1.0, 'W'], '1.00 W'), ([3, 'C'], '3.00 C'), ([3, 'W', 5], '3.0000 W'), ([1.23456], '1.23'), ([12.3456], '12.3'), ([123.456], '123'), ([1234.56], '1.23 k'), ([12345, '', 6], '12.3450 k'), ([200000], '200 k'), ([9999], '10.0 k'), ([99999], '100 k'), ([9.99999], '10.0'), ([-9999], '-10.0 k'), ([9.999, '', 2], '10'), ([999.4], '999'), ([999.9, 'V'], '1.00 kV'), ([999.99, 'V'], '1.00 kV'), ([999999, 'V'], '1.00 MV'), ([0.0009999, 'V'], '1.00 mV'), ([1e+25, 'm'], '10.0 Ym'), ([1e+26, 'm'], '100 Ym'), ([1e+27, 'A'], '1.00 RA'), ([1.234e+28, 'A'], '12.3 RA'), ([1.234e-28, 'A'], '123 qA'), ([1.235e+29, 'A'], '124 RA'), ([2.56e-30, 'V'], '2.56 qV'), ([2.596e+32, 'F'], '260 QF'), ([1e+50], '1.00 x 10\u2075\u2070'), ([1e-50], '1.00 x 10\u207b\u2075\u2070'), ([-1500, 'V'], '-1.50 kV'), ([0.12], '120 m'), ([0.012], '12.0 m'), ([0.0012], '1.20 m'), ([0.00012], '120 \u03bc'), ([1e-23], '10.0 y'), ([1e-24], '1.00 y'), ([1e-25], '100 r'), ([1e-26], '10.0 r'), ([1, '\u00b0'], '1.00\u00b0'), ([0.1, '\u00b0'], '100m\u00b0'), ([100], '100'), ([0.1], '100 m'), ([1.5123, '', 0], '2'), ([10.5123, '', 0], '11'), ([10.5123, '', 1], '11'), ([10.5123, '', 2], '11'), ([10.5123, '', 3], '10.5'), ([1, '', 0], '1'), ([10, '', 0], '10'), ([100, '', 0], '100'), ([1000, '', 0], '1 k'), ([1, '', 1], '1'), ([10, '', 1], '10'), ([100, '', 1], '100'), ([1000, '', 1], '1 k'), ([1, '', 2], '1.0'), ([10, '', 2], '10'), ([100, '', 2], '100'), ([1000, '', 2], '1.0 k'), ([1, '', 3], '1.00'), ([10, '', 3], '10.0'), ([100, '', 3], '100'), ([1000, '', 3], '1.00 k'), ([math.nan], 'NaN'), ([math.nan, 'm'], 'NaN'), ([math.inf], '+Inf'), ([-math.inf], '-Inf')], ids=str)"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::FakeDate",
+      "path": "tests/test_time.py",
+      "qualname": "FakeDate",
+      "signature": "class FakeDate",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_time.py::FakeDate.__init__",
+      "path": "tests/test_time.py",
+      "qualname": "FakeDate.__init__",
+      "signature": "def __init__(self, year: int, month: int, day: int) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_time.py::FakeDate.__str__",
+      "path": "tests/test_time.py",
+      "qualname": "FakeDate.__str__",
+      "signature": "def __str__(self) -> str",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_time.py::assert_equal_datetime",
+      "path": "tests/test_time.py",
+      "qualname": "assert_equal_datetime",
+      "signature": "def assert_equal_datetime(dt1: dt.datetime, dt2: dt.datetime) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_time.py::assert_equal_timedelta",
+      "path": "tests/test_time.py",
+      "qualname": "assert_equal_timedelta",
+      "signature": "def assert_equal_timedelta(td1: dt.timedelta, td2: dt.timedelta) -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_time.py::test_date_and_delta",
+      "path": "tests/test_time.py",
+      "qualname": "test_date_and_delta",
+      "signature": "def test_date_and_delta() -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_time.py::test_naturaldelta_nomonths",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaldelta_nomonths",
+      "signature": "def test_naturaldelta_nomonths(test_input: dt.timedelta, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('test_input, expected', [(dt.timedelta(days=7), '7 days'), (dt.timedelta(days=31), '31 days'), (dt.timedelta(days=230), '230 days'), (dt.timedelta(days=400), '1 year, 35 days')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturaldelta",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaldelta",
+      "signature": "def test_naturaldelta(test_input: float | dt.timedelta, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('test_input, expected', [(0, 'a moment'), (1, 'a second'), (23.5, '23 seconds'), (30, '30 seconds'), (dt.timedelta(microseconds=13), 'a moment'), (dt.timedelta(minutes=1, seconds=29), 'a minute'), (dt.timedelta(minutes=1, seconds=30), '2 minutes'), (dt.timedelta(minutes=1, seconds=59), '2 minutes'), (dt.timedelta(minutes=2), '2 minutes'), (dt.timedelta(minutes=59), '59 minutes'), (dt.timedelta(minutes=59, seconds=30), 'an hour'), (dt.timedelta(hours=1, minutes=29), 'an hour'), (dt.timedelta(hours=1, minutes=30), '2 hours'), (dt.timedelta(hours=2, minutes=30), '2 hours'), (dt.timedelta(hours=3, minutes=30), '4 hours'), (dt.timedelta(hours=23, minutes=50, seconds=50), 'a day'), (dt.timedelta(days=1), 'a day'), (dt.timedelta(days=500), '1 year, 4 months'), (dt.timedelta(days=365 * 2 + 35), '2 years'), (dt.timedelta(seconds=1), 'a second'), (dt.timedelta(seconds=30), '30 seconds'), (dt.timedelta(days=364), 'a year'), (dt.timedelta(days=365 + 364), '2 years'), (dt.timedelta(days=10000), '27 years'), (dt.timedelta(days=365 + 35), '1 year, 1 month'), (dt.timedelta(days=365 * 2 + 65), '2 years'), (dt.timedelta(days=365 + 4), '1 year, 4 days'), (dt.timedelta(days=35), 'a month'), (dt.timedelta(days=65), '2 months'), (dt.timedelta(days=9), '9 days'), (dt.timedelta(days=365), 'a year'), (dt.timedelta(days=365 * 1141), '1,141 years'), (dt.timedelta(days=365 * 2), '2 years'), (dt.timedelta(days=365 * 2.4), '2 years'), (dt.timedelta(days=365 * 2.6), '3 years'), (dt.timedelta(days=365 * 2.9), '3 years'), (dt.timedelta(days=365 * 3), '3 years'), ('NaN', 'NaN'), (dt.timedelta(days=999999999), '2,739,726 years')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturaldelta_non_finite",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaldelta_non_finite",
+      "signature": "def test_naturaldelta_non_finite(value: float, expected: str) -> None",
+      "docstring": "Non-finite floats are returned unchanged instead of raising.",
+      "decorators": [
+        "pytest.mark.parametrize('value, expected', [(float('nan'), 'nan'), (float('inf'), 'inf'), (float('-inf'), '-inf')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturaldelta_too_large_value_raises",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaldelta_too_large_value_raises",
+      "signature": "def test_naturaldelta_too_large_value_raises() -> None",
+      "docstring": "A too-large *finite* value still raises OverflowError (unlike inf).",
+      "decorators": []
+    },
+    {
+      "id": "tests/test_time.py::test_naturaltime",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaltime",
+      "signature": "def test_naturaltime(test_input: dt.datetime | dt.timedelta | float, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "freeze_time(FROZEN_DATE)",
+        "pytest.mark.parametrize('test_input, expected', [(NOW, 'now'), (NOW - dt.timedelta(seconds=1), 'a second ago'), (NOW - dt.timedelta(seconds=30), '30 seconds ago'), (NOW - dt.timedelta(minutes=1, seconds=29), 'a minute ago'), (NOW - dt.timedelta(minutes=1, seconds=30), '2 minutes ago'), (NOW - dt.timedelta(minutes=2), '2 minutes ago'), (NOW - dt.timedelta(hours=1, minutes=29, seconds=30), 'an hour ago'), (NOW - dt.timedelta(hours=1, minutes=30, seconds=30), '2 hours ago'), (NOW - dt.timedelta(hours=23, minutes=29, seconds=50), '23 hours ago'), (NOW - dt.timedelta(hours=23, minutes=50, seconds=50), 'a day ago'), (NOW - dt.timedelta(days=1), 'a day ago'), (NOW - dt.timedelta(days=500), '1 year, 4 months ago'), (NOW - dt.timedelta(days=365 * 2 + 35), '2 years ago'), (NOW + dt.timedelta(seconds=1), 'a second from now'), (NOW + dt.timedelta(seconds=30), '30 seconds from now'), (NOW + dt.timedelta(minutes=1, seconds=29), 'a minute from now'), (NOW + dt.timedelta(minutes=1, seconds=30), '2 minutes from now'), (NOW + dt.timedelta(minutes=2), '2 minutes from now'), (NOW + dt.timedelta(hours=1, minutes=29, seconds=30), 'an hour from now'), (NOW + dt.timedelta(hours=1, minutes=30, seconds=30), '2 hours from now'), (NOW + dt.timedelta(hours=23, minutes=29, seconds=50), '23 hours from now'), (NOW + dt.timedelta(hours=23, minutes=50, seconds=50), 'a day from now'), (NOW + dt.timedelta(days=1), 'a day from now'), (NOW + dt.timedelta(days=500), '1 year, 4 months from now'), (NOW + dt.timedelta(days=365 * 2 + 35), '2 years from now'), (NOW + dt.timedelta(days=10000), '27 years from now'), (NOW - dt.timedelta(days=365 + 35), '1 year, 1 month ago'), (dt.timedelta(days=-10000), '27 years from now'), (dt.timedelta(days=365 + 35), '1 year, 1 month ago'), (22.5, '22 seconds ago'), (23.5, '24 seconds ago'), (23.9, '24 seconds ago'), (30, '30 seconds ago'), (NOW - dt.timedelta(days=365 * 2 + 65), '2 years ago'), (NOW - dt.timedelta(days=365 + 4), '1 year, 4 days ago'), ('NaN', 'NaN')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturaltime_nomonths",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaltime_nomonths",
+      "signature": "def test_naturaltime_nomonths(test_input: dt.datetime | dt.timedelta | float, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "freeze_time(FROZEN_DATE)",
+        "pytest.mark.parametrize('test_input, expected', [(NOW, 'now'), (NOW - dt.timedelta(seconds=1), 'a second ago'), (NOW - dt.timedelta(seconds=30), '30 seconds ago'), (NOW - dt.timedelta(minutes=1, seconds=29), 'a minute ago'), (NOW - dt.timedelta(minutes=1, seconds=30), '2 minutes ago'), (NOW - dt.timedelta(minutes=2), '2 minutes ago'), (NOW - dt.timedelta(hours=1, minutes=29, seconds=30), 'an hour ago'), (NOW - dt.timedelta(hours=1, minutes=30, seconds=30), '2 hours ago'), (NOW - dt.timedelta(hours=23, minutes=50, seconds=50), 'a day ago'), (NOW - dt.timedelta(days=1), 'a day ago'), (NOW - dt.timedelta(days=17), '17 days ago'), (NOW - dt.timedelta(days=47), '47 days ago'), (NOW - dt.timedelta(days=500), '1 year, 135 days ago'), (NOW - dt.timedelta(days=365 * 2 + 35), '2 years ago'), (NOW + dt.timedelta(seconds=1), 'a second from now'), (NOW + dt.timedelta(seconds=30), '30 seconds from now'), (NOW + dt.timedelta(minutes=1, seconds=29), 'a minute from now'), (NOW + dt.timedelta(minutes=1, seconds=30), '2 minutes from now'), (NOW + dt.timedelta(minutes=2), '2 minutes from now'), (NOW + dt.timedelta(hours=1, minutes=29, seconds=30), 'an hour from now'), (NOW + dt.timedelta(hours=1, minutes=30, seconds=30), '2 hours from now'), (NOW + dt.timedelta(hours=23, minutes=29, seconds=50), '23 hours from now'), (NOW + dt.timedelta(hours=23, minutes=50, seconds=50), 'a day from now'), (NOW + dt.timedelta(days=1), 'a day from now'), (NOW + dt.timedelta(days=500), '1 year, 135 days from now'), (NOW + dt.timedelta(days=365 * 2 + 35), '2 years from now'), (NOW + dt.timedelta(days=10000), '27 years from now'), (NOW - dt.timedelta(days=365 + 35), '1 year, 35 days ago'), (dt.timedelta(days=-10000), '27 years from now'), (dt.timedelta(days=365 + 35), '1 year, 35 days ago'), (22.5, '22 seconds ago'), (23.5, '24 seconds ago'), (30, '30 seconds ago'), (NOW - dt.timedelta(days=365 * 2 + 65), '2 years ago'), (NOW - dt.timedelta(days=365 + 4), '1 year, 4 days ago'), ('NaN', 'NaN')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturalday",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturalday",
+      "signature": "def test_naturalday(test_args: list[typing.Any], expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "freeze_time(FROZEN_DATE)",
+        "pytest.mark.parametrize('test_args, expected', [([TODAY], 'today'), ([TOMORROW], 'tomorrow'), ([YESTERDAY], 'yesterday'), ([dt.date(TODAY.year, 3, 5)], 'Mar 05'), (['02/26/1984'], '02/26/1984'), ([dt.date(1982, 6, 27), '%Y.%m.%d'], '1982.06.27'), ([None], 'None'), (['Not a date at all.'], 'Not a date at all.'), ([VALUE_ERROR_TEST], str(VALUE_ERROR_TEST)), ([OVERFLOW_ERROR_TEST], str(OVERFLOW_ERROR_TEST))])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturaldate",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaldate",
+      "signature": "def test_naturaldate(test_input: dt.date, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "freeze_time(FROZEN_DATE)",
+        "pytest.mark.parametrize('test_input, expected', [(TODAY, 'today'), (TOMORROW, 'tomorrow'), (YESTERDAY, 'yesterday'), (dt.date(TODAY.year, 3, 5), 'Mar 05'), (dt.date(1982, 6, 27), 'Jun 27 1982'), (None, 'None'), ('Not a date at all.', 'Not a date at all.'), (VALUE_ERROR_TEST, str(VALUE_ERROR_TEST)), (OVERFLOW_ERROR_TEST, str(OVERFLOW_ERROR_TEST)), (dt.date(2009, 2, 2), 'Feb 02 2009'), (dt.date(2009, 3, 2), 'Mar 02 2009'), (dt.date(2009, 4, 2), 'Apr 02 2009'), (dt.date(2009, 5, 2), 'May 02 2009'), (dt.date(2009, 6, 2), 'Jun 02 2009'), (dt.date(2009, 7, 2), 'Jul 02 2009'), (dt.date(2009, 8, 2), 'Aug 02 2009'), (dt.date(2009, 9, 2), 'Sep 02 2009'), (dt.date(2009, 10, 2), 'Oct 02'), (dt.date(2009, 11, 2), 'Nov 02'), (dt.date(2009, 12, 2), 'Dec 02'), (dt.date(2010, 1, 2), 'Jan 02'), (dt.date(2010, 2, 2), 'today'), (dt.date(2010, 3, 2), 'Mar 02'), (dt.date(2010, 4, 2), 'Apr 02'), (dt.date(2010, 5, 2), 'May 02'), (dt.date(2010, 6, 2), 'Jun 02'), (dt.date(2010, 7, 2), 'Jul 02'), (dt.date(2010, 8, 2), 'Aug 02 2010'), (dt.date(2010, 9, 2), 'Sep 02 2010'), (dt.date(2010, 10, 2), 'Oct 02 2010'), (dt.date(2010, 11, 2), 'Nov 02 2010'), (dt.date(2010, 12, 2), 'Dec 02 2010'), (dt.date(2011, 1, 2), 'Jan 02 2011'), (dt.date(2011, 2, 2), 'Feb 02 2011')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturaldate_tz_aware",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaldate_tz_aware",
+      "signature": "def test_naturaldate_tz_aware() -> None",
+      "docstring": "naturaldate should compare dates in the timezone of the given value.",
+      "decorators": [
+        "freeze_time('2023-10-15 23:00:00+00:00')"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturaldelta_minimum_unit_default",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaldelta_minimum_unit_default",
+      "signature": "def test_naturaldelta_minimum_unit_default(seconds: float, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('seconds, expected', [(ONE_MICROSECOND, 'a moment'), (FOUR_MICROSECONDS, 'a moment'), (ONE_MILLISECOND, 'a moment'), (FOUR_MILLISECONDS, 'a moment'), (2, '2 seconds'), (4, '4 seconds'), (ONE_HOUR + FOUR_MILLISECONDS, 'an hour'), (ONE_DAY + FOUR_MILLISECONDS, 'a day'), (ONE_YEAR + FOUR_MICROSECONDS, 'a year')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturaldelta_minimum_unit_explicit",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaldelta_minimum_unit_explicit",
+      "signature": "def test_naturaldelta_minimum_unit_explicit(minimum_unit: str, seconds: float, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('minimum_unit, seconds, expected', [('seconds', ONE_MICROSECOND, 'a moment'), ('seconds', FOUR_MICROSECONDS, 'a moment'), ('seconds', ONE_MILLISECOND, 'a moment'), ('seconds', FOUR_MILLISECONDS, 'a moment'), ('seconds', MICROSECONDS_101_943, 'a moment'), ('seconds', MILLISECONDS_1_337, 'a second'), ('seconds', 2, '2 seconds'), ('seconds', 4, '4 seconds'), ('seconds', ONE_HOUR + FOUR_MILLISECONDS, 'an hour'), ('seconds', ONE_DAY + FOUR_MILLISECONDS, 'a day'), ('seconds', ONE_YEAR + FOUR_MICROSECONDS, 'a year'), ('milliseconds', FOUR_MICROSECONDS, '0 milliseconds'), ('milliseconds', ONE_MILLISECOND, '1 millisecond'), ('milliseconds', FOUR_MILLISECONDS, '4 milliseconds'), ('milliseconds', MICROSECONDS_101_943, '101 milliseconds'), ('milliseconds', MILLISECONDS_1_337, 'a second'), ('milliseconds', 2, '2 seconds'), ('milliseconds', 4, '4 seconds'), ('milliseconds', ONE_HOUR + FOUR_MILLISECONDS, 'an hour'), ('milliseconds', ONE_YEAR + FOUR_MICROSECONDS, 'a year'), ('microseconds', ONE_MICROSECOND, '1 microsecond'), ('microseconds', FOUR_MICROSECONDS, '4 microseconds'), ('microseconds', FOUR_MILLISECONDS, '4 milliseconds'), ('microseconds', MICROSECONDS_101_943, '101 milliseconds'), ('microseconds', MILLISECONDS_1_337, 'a second'), ('microseconds', 2, '2 seconds'), ('microseconds', 4, '4 seconds'), ('microseconds', ONE_HOUR + FOUR_MILLISECONDS, 'an hour'), ('microseconds', ONE_DAY + FOUR_MILLISECONDS, 'a day'), ('microseconds', ONE_YEAR + FOUR_MICROSECONDS, 'a year')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturaltime_minimum_unit_default",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaltime_minimum_unit_default",
+      "signature": "def test_naturaltime_minimum_unit_default(seconds: float, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "freeze_time(FROZEN_DATE)",
+        "pytest.mark.parametrize('seconds, expected', [(ONE_MICROSECOND, 'now'), (FOUR_MICROSECONDS, 'now'), (ONE_MILLISECOND, 'now'), (FOUR_MILLISECONDS, 'now'), (2, '2 seconds ago'), (4, '4 seconds ago'), (ONE_HOUR + FOUR_MILLISECONDS, 'an hour ago'), (ONE_DAY + FOUR_MILLISECONDS, 'a day ago'), (ONE_YEAR + FOUR_MICROSECONDS, 'a year ago')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturaltime_minimum_unit_explicit",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaltime_minimum_unit_explicit",
+      "signature": "def test_naturaltime_minimum_unit_explicit(minimum_unit: str, seconds: float, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "freeze_time(FROZEN_DATE)",
+        "pytest.mark.parametrize('minimum_unit, seconds, expected', [('seconds', ONE_MICROSECOND, 'now'), ('seconds', FOUR_MICROSECONDS, 'now'), ('seconds', ONE_MILLISECOND, 'now'), ('seconds', FOUR_MILLISECONDS, 'now'), ('seconds', MICROSECONDS_101_943, 'now'), ('seconds', MILLISECONDS_1_337, 'a second ago'), ('seconds', 2, '2 seconds ago'), ('seconds', 4, '4 seconds ago'), ('seconds', ONE_HOUR + FOUR_MILLISECONDS, 'an hour ago'), ('seconds', ONE_DAY + FOUR_MILLISECONDS, 'a day ago'), ('seconds', ONE_YEAR + FOUR_MICROSECONDS, 'a year ago'), ('milliseconds', FOUR_MICROSECONDS, '0 milliseconds ago'), ('milliseconds', ONE_MILLISECOND, '1 millisecond ago'), ('milliseconds', FOUR_MILLISECONDS, '4 milliseconds ago'), ('milliseconds', MICROSECONDS_101_943, '101 milliseconds ago'), ('milliseconds', MILLISECONDS_1_337, 'a second ago'), ('milliseconds', 2, '2 seconds ago'), ('milliseconds', 4, '4 seconds ago'), ('milliseconds', ONE_HOUR + FOUR_MILLISECONDS, 'an hour ago'), ('milliseconds', ONE_YEAR + FOUR_MICROSECONDS, 'a year ago'), ('microseconds', ONE_MICROSECOND, '1 microsecond ago'), ('microseconds', FOUR_MICROSECONDS, '4 microseconds ago'), ('microseconds', FOUR_MILLISECONDS, '4 milliseconds ago'), ('microseconds', MICROSECONDS_101_943, '101 milliseconds ago'), ('microseconds', MILLISECONDS_1_337, 'a second ago'), ('microseconds', 2, '2 seconds ago'), ('microseconds', 4, '4 seconds ago'), ('microseconds', ONE_HOUR + FOUR_MILLISECONDS, 'an hour ago'), ('microseconds', ONE_DAY + FOUR_MILLISECONDS, 'a day ago'), ('microseconds', ONE_YEAR + FOUR_MICROSECONDS, 'a year ago')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturaltime_timezone",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaltime_timezone",
+      "signature": "def test_naturaltime_timezone(test_input: dt.datetime, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "freeze_time(FROZEN_DATE)",
+        "pytest.mark.parametrize('test_input, expected', [(NOW_UTC, 'now'), (NOW_UTC - dt.timedelta(seconds=1), 'a second ago'), (NOW_UTC - dt.timedelta(seconds=30), '30 seconds ago'), (NOW_UTC - dt.timedelta(minutes=1, seconds=29), 'a minute ago'), (NOW_UTC - dt.timedelta(minutes=1, seconds=30), '2 minutes ago'), (NOW_UTC - dt.timedelta(minutes=2), '2 minutes ago'), (NOW_UTC - dt.timedelta(hours=1, minutes=29, seconds=30), 'an hour ago'), (NOW_UTC - dt.timedelta(hours=1, minutes=30, seconds=30), '2 hours ago'), (NOW_UTC - dt.timedelta(hours=23, minutes=29, seconds=50), '23 hours ago'), (NOW_UTC - dt.timedelta(hours=23, minutes=50, seconds=50), 'a day ago'), (NOW_UTC - dt.timedelta(days=1), 'a day ago'), (NOW_UTC - dt.timedelta(days=500), '1 year, 4 months ago'), (NOW_UTC - dt.timedelta(days=365 * 2 + 35), '2 years ago'), (NOW_UTC + dt.timedelta(seconds=1), 'a second from now'), (NOW_UTC + dt.timedelta(seconds=30), '30 seconds from now'), (NOW_UTC + dt.timedelta(minutes=1, seconds=29), 'a minute from now'), (NOW_UTC + dt.timedelta(minutes=1, seconds=30), '2 minutes from now'), (NOW_UTC + dt.timedelta(minutes=2), '2 minutes from now'), (NOW_UTC + dt.timedelta(hours=1, minutes=29, seconds=30), 'an hour from now'), (NOW_UTC + dt.timedelta(hours=1, minutes=30, seconds=30), '2 hours from now'), (NOW_UTC + dt.timedelta(hours=23, minutes=29, seconds=50), '23 hours from now'), (NOW_UTC + dt.timedelta(hours=23, minutes=50, seconds=50), 'a day from now'), (NOW_UTC + dt.timedelta(days=1), 'a day from now'), (NOW_UTC + dt.timedelta(days=500), '1 year, 4 months from now'), (NOW_UTC + dt.timedelta(days=365 * 2 + 35), '2 years from now'), (NOW_UTC + dt.timedelta(days=10000), '27 years from now'), (NOW_UTC - dt.timedelta(days=365 + 35), '1 year, 1 month ago'), (NOW_UTC - dt.timedelta(days=365 * 2 + 65), '2 years ago'), (NOW_UTC - dt.timedelta(days=365 + 4), '1 year, 4 days ago')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_naturaltime_timezone_when",
+      "path": "tests/test_time.py",
+      "qualname": "test_naturaltime_timezone_when",
+      "signature": "def test_naturaltime_timezone_when(test_input: dt.datetime, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "freeze_time(FROZEN_DATE)",
+        "pytest.mark.parametrize('test_input, expected', [(NOW_UTC, 'now'), (NOW_UTC - dt.timedelta(seconds=1), 'a second ago'), (NOW_UTC - dt.timedelta(seconds=30), '30 seconds ago'), (NOW_UTC - dt.timedelta(minutes=1, seconds=29), 'a minute ago'), (NOW_UTC - dt.timedelta(minutes=1, seconds=30), '2 minutes ago'), (NOW_UTC - dt.timedelta(minutes=2), '2 minutes ago'), (NOW_UTC - dt.timedelta(hours=1, minutes=29, seconds=30), 'an hour ago'), (NOW_UTC - dt.timedelta(hours=1, minutes=30, seconds=30), '2 hours ago'), (NOW_UTC - dt.timedelta(hours=23, minutes=29, seconds=50), '23 hours ago'), (NOW_UTC - dt.timedelta(hours=23, minutes=50, seconds=50), 'a day ago'), (NOW_UTC - dt.timedelta(days=1), 'a day ago'), (NOW_UTC - dt.timedelta(days=500), '1 year, 4 months ago'), (NOW_UTC - dt.timedelta(days=365 * 2 + 35), '2 years ago'), (NOW_UTC + dt.timedelta(seconds=1), 'a second from now'), (NOW_UTC + dt.timedelta(seconds=30), '30 seconds from now'), (NOW_UTC + dt.timedelta(minutes=1, seconds=29), 'a minute from now'), (NOW_UTC + dt.timedelta(minutes=1, seconds=30), '2 minutes from now'), (NOW_UTC + dt.timedelta(minutes=2), '2 minutes from now'), (NOW_UTC + dt.timedelta(hours=1, minutes=29, seconds=30), 'an hour from now'), (NOW_UTC + dt.timedelta(hours=1, minutes=30, seconds=30), '2 hours from now'), (NOW_UTC + dt.timedelta(hours=23, minutes=29, seconds=50), '23 hours from now'), (NOW_UTC + dt.timedelta(hours=23, minutes=50, seconds=50), 'a day from now'), (NOW_UTC + dt.timedelta(days=1), 'a day from now'), (NOW_UTC + dt.timedelta(days=500), '1 year, 4 months from now'), (NOW_UTC + dt.timedelta(days=365 * 2 + 35), '2 years from now'), (NOW_UTC + dt.timedelta(days=10000), '27 years from now'), (NOW_UTC - dt.timedelta(days=365 + 35), '1 year, 1 month ago'), (NOW_UTC - dt.timedelta(days=365 * 2 + 65), '2 years ago'), (NOW_UTC - dt.timedelta(days=365 + 4), '1 year, 4 days ago')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_precisedelta_one_unit_enough",
+      "path": "tests/test_time.py",
+      "qualname": "test_precisedelta_one_unit_enough",
+      "signature": "def test_precisedelta_one_unit_enough(val: dt.timedelta | float, min_unit: str, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('val, min_unit, expected', [(dt.timedelta(microseconds=1), 'microseconds', '1 microsecond'), (dt.timedelta(microseconds=2), 'microseconds', '2 microseconds'), (dt.timedelta(microseconds=1000), 'microseconds', '1 millisecond'), (dt.timedelta(microseconds=2000), 'microseconds', '2 milliseconds'), (dt.timedelta(seconds=1), 'seconds', '1 second'), (1, 'seconds', '1 second'), (2, 'seconds', '2 seconds'), (60, 'seconds', '1 minute'), (120, 'seconds', '2 minutes'), (3600, 'seconds', '1 hour'), (3600 * 2, 'seconds', '2 hours'), (3600 * 24, 'seconds', '1 day'), (3600 * 24 * 2, 'seconds', '2 days'), (3600 * 24 * 365, 'seconds', '1 year'), (3600 * 24 * 365 * 2, 'seconds', '2 years'), (3600 * 24 * 365 * 1963, 'seconds', '1,963 years')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_precisedelta_multiple_units",
+      "path": "tests/test_time.py",
+      "qualname": "test_precisedelta_multiple_units",
+      "signature": "def test_precisedelta_multiple_units(val: dt.timedelta | float, min_unit: str, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('val, min_unit, expected', [(dt.timedelta(microseconds=1001), 'microseconds', '1 millisecond and 1 microsecond'), (dt.timedelta(microseconds=2002), 'microseconds', '2 milliseconds and 2 microseconds'), (dt.timedelta(seconds=1, microseconds=2), 'microseconds', '1 second and 2 microseconds'), (dt.timedelta(hours=4, seconds=3, microseconds=2), 'microseconds', '4 hours, 3 seconds and 2 microseconds'), (dt.timedelta(days=5, hours=4, seconds=3, microseconds=2), 'microseconds', '5 days, 4 hours, 3 seconds and 2 microseconds'), (dt.timedelta(days=370, hours=4, seconds=3, microseconds=2), 'microseconds', '1 year, 5 days, 4 hours, 3 seconds and 2 microseconds'), (dt.timedelta(days=370, microseconds=2), 'microseconds', '1 year, 5 days and 2 microseconds'), (dt.timedelta(days=370, seconds=2), 'microseconds', '1 year, 5 days and 2 seconds'), (dt.timedelta(seconds=0.01), 'minutes', '0 minutes'), (dt.timedelta(days=31), 'seconds', '1 month'), (dt.timedelta(days=32), 'seconds', '1 month and 1 day'), (dt.timedelta(days=62), 'seconds', '2 months and 1 day'), (dt.timedelta(days=92), 'seconds', '3 months'), (dt.timedelta(days=31), 'days', '1 month'), (dt.timedelta(days=32), 'days', '1 month and 1 day'), (dt.timedelta(days=62), 'days', '2 months and 1 day'), (dt.timedelta(days=92), 'days', '3 months')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_precisedelta_custom_format",
+      "path": "tests/test_time.py",
+      "qualname": "test_precisedelta_custom_format",
+      "signature": "def test_precisedelta_custom_format(val: dt.timedelta | float, min_unit: str, fmt: str, expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('val, min_unit, fmt, expected', [(dt.timedelta(microseconds=1001), 'milliseconds', '%0.4f', '1.0010 milliseconds'), (dt.timedelta(microseconds=2002), 'milliseconds', '%0.4f', '2.0020 milliseconds'), (dt.timedelta(microseconds=2002), 'milliseconds', '%0.2f', '2 milliseconds'), (dt.timedelta(seconds=1, microseconds=230000), 'seconds', '%0.2f', '1.23 seconds'), (dt.timedelta(hours=4, seconds=3, microseconds=200000), 'seconds', '%0.2f', '4 hours and 3.20 seconds'), (dt.timedelta(days=5, hours=4, seconds=30 * 60), 'seconds', '%0.2f', '5 days, 4 hours and 30 minutes'), (dt.timedelta(days=5, hours=4, seconds=30 * 60), 'hours', '%0.2f', '5 days and 4.50 hours'), (dt.timedelta(days=5, hours=4, seconds=30 * 60), 'days', '%0.2f', '5.19 days'), (dt.timedelta(days=31), 'days', '%d', '1 month'), (dt.timedelta(days=31), 'days', '%.0f', '1 month'), (dt.timedelta(days=32), 'days', '%d', '1 month and 1 day'), (dt.timedelta(days=32), 'days', '%.0f', '1 month and 1 day'), (dt.timedelta(days=62), 'days', '%d', '2 months and 1 day'), (dt.timedelta(days=92), 'days', '%d', '3 months'), (dt.timedelta(days=120), 'months', '%0.2f', '3.93 months'), (dt.timedelta(days=183), 'years', '%0.1f', '0.5 years'), (0.01, 'seconds', '%0.3f', '0.010 seconds'), (31, 'minutes', '%d', '0 minutes'), (31, 'minutes', '%0.0f', '1 minute'), (60 + 29.99, 'minutes', '%d', '1 minute'), (60 + 29.99, 'minutes', '%.0f', '1 minute'), (60 + 30, 'minutes', '%d', '1 minute'), (60 + 30, 'minutes', '%.0f', '2 minutes'), (60 * 60 + 30.99, 'minutes', '%.0f', '1 hour'), (60 * 60 + 31, 'minutes', '%.0f', '1 hour and 1 minute'), (ONE_DAY - MILLISECONDS_1_337, 'seconds', '%.1f', '23 hours, 59 minutes and 58.7 seconds'), (ONE_DAY - ONE_MILLISECOND, 'seconds', '%.4f', '23 hours, 59 minutes and 59.9990 seconds'), (91500, 'hours', '%0.0f', '1 day and 1 hour'), (9 * 60 * 60 - 1, 'minutes', '%0.0f', '9 hours'), (dt.timedelta(days=30.99999), 'minutes', '%0.0f', '1 month'), (dt.timedelta(days=30.5 * 3, minutes=30), 'hours', '%0.0f', '2 months, 30 days and 12 hours'), (dt.timedelta(days=10, hours=6), 'days', '%0.2f', '10.25 days'), (dt.timedelta(days=30.55), 'days', '%0.1f', '30.6 days'), (dt.timedelta(microseconds=999.5), 'microseconds', '%0.0f', '1 millisecond'), (dt.timedelta(milliseconds=999.5), 'milliseconds', '%0.0f', '1 second'), (dt.timedelta(seconds=59.5), 'seconds', '%0.0f', '1 minute'), (dt.timedelta(minutes=59.5), 'minutes', '%0.0f', '1 hour'), (dt.timedelta(days=364), 'months', '%0.0f', '1 year')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_precisedelta_suppress_units",
+      "path": "tests/test_time.py",
+      "qualname": "test_precisedelta_suppress_units",
+      "signature": "def test_precisedelta_suppress_units(val: dt.timedelta | float, min_unit: str, suppress: list[str], expected: str) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('val, min_unit, suppress, expected', [(dt.timedelta(microseconds=1200), 'microseconds', [], '1 millisecond and 200 microseconds'), (dt.timedelta(microseconds=1200), 'microseconds', ['milliseconds'], '1200 microseconds'), (dt.timedelta(microseconds=1200), 'microseconds', ['microseconds'], '1.20 milliseconds'), (dt.timedelta(seconds=1, microseconds=200), 'microseconds', ['seconds'], '1000 milliseconds and 200 microseconds'), (dt.timedelta(seconds=1, microseconds=200000), 'microseconds', ['milliseconds'], '1 second and 200000 microseconds'), (dt.timedelta(seconds=1, microseconds=200000), 'microseconds', ['milliseconds', 'microseconds'], '1.20 seconds'), (dt.timedelta(hours=4, seconds=30, microseconds=200), 'microseconds', ['microseconds'], '4 hours, 30 seconds and 0.20 milliseconds'), (dt.timedelta(hours=4, seconds=30, microseconds=200), 'microseconds', ['seconds'], '4 hours, 30000 milliseconds and 200 microseconds'), (dt.timedelta(hours=4, seconds=30, microseconds=200), 'microseconds', ['seconds', 'milliseconds'], '4 hours and 30000200 microseconds'), (dt.timedelta(hours=4, seconds=30, microseconds=200), 'microseconds', ['hours'], '240 minutes, 30 seconds and 200 microseconds'), (dt.timedelta(hours=4, seconds=30, microseconds=200), 'microseconds', ['hours', 'seconds', 'milliseconds', 'microseconds'], '240.50 minutes')])"
+      ]
+    },
+    {
+      "id": "tests/test_time.py::test_precisedelta_bogus_call",
+      "path": "tests/test_time.py",
+      "qualname": "test_precisedelta_bogus_call",
+      "signature": "def test_precisedelta_bogus_call() -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_time.py::test_time_unit",
+      "path": "tests/test_time.py",
+      "qualname": "test_time_unit",
+      "signature": "def test_time_unit() -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_time.py::test_rounding_by_fmt",
+      "path": "tests/test_time.py",
+      "qualname": "test_rounding_by_fmt",
+      "signature": "def test_rounding_by_fmt(fmt: str, value: float, expected: float) -> None",
+      "docstring": null,
+      "decorators": [
+        "pytest.mark.parametrize('fmt, value, expected', [('%.2f', 1.011, 1.01), ('%.0f', 1.01, 1.0), ('%.0f', 1.5, 2.0), ('%10.0f', 1.01, 1.0), ('%i', 1.01, 1), ('%d', 1.999999999999999, 1), ('%d', 2.0, 2)])"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "README.md#humanize",
+      "path": "README.md",
+      "heading_path": [
+        "humanize"
+      ],
+      "text": "[![PyPI version](https://img.shields.io/pypi/v/humanize.svg?logo=pypi&logoColor=FFE873)](https://pypi.org/project/humanize/)\n[![Supported Python versions](https://img.shields.io/pypi/pyversions/humanize.svg?logo=python&logoColor=FFE873)](https://pypi.org/project/humanize/)\n[![Documentation Status](https://readthedocs.org/projects/python-humanize/badge/?version=latest)](https://humanize.readthedocs.io/en/latest/?badge=latest)\n[![PyPI downloads](https://img.shields.io/pypi/dm/humanize.svg)](https://pypistats.org/packages/humanize)\n[![GitHub Actions status](https://github.com/python-humanize/humanize/workflows/Test/badge.svg)](https://github.com/python-humanize/humanize/actions)\n[![codecov](https://codecov.io/gh/python-humanize/humanize/branch/main/graph/badge.svg)](https://codecov.io/gh/python-humanize/humanize)\n[![MIT License](https://img.shields.io/github/license/python-humanize/humanize.svg)](LICENCE)\n[![Tidelift](https://tidelift.com/badges/package/pypi/humanize)](https://tidelift.com/subscription/pkg/pypi-humanize?utm_source=pypi-humanize&utm_medium=badge)\n\nThis modest package contains various common humanization utilities, like turning a\nnumber into a fuzzy human-readable duration (\"3 minutes ago\") or into a human-readable\nsize or throughput. It is localized to:\n\n- Arabic\n- Basque\n- Bengali\n- Brazilian Portuguese\n- Catalan\n- Danish\n- Dutch\n- Esperanto\n- European Portuguese\n- Finnish\n- French\n- German\n- Greek\n- Hebrew\n- Indonesian\n- Italian\n- Japanese\n- Klingon\n- Korean\n- Latvian\n- Norwegian\n- Persian\n- Polish\n- Russian\n- Simplified Chinese\n- Sinhala\n- Slovak\n- Slovenian\n- Spanish\n- Swedish\n- Turkish\n- Ukrainian\n- Uzbek\n- Vietnamese"
+    },
+    {
+      "id": "README.md#humanize > API reference",
+      "path": "README.md",
+      "heading_path": [
+        "humanize",
+        "API reference"
+      ],
+      "text": "[https://humanize.readthedocs.io](https://humanize.readthedocs.io/)\n\n<!-- usage-start -->"
+    },
+    {
+      "id": "README.md#humanize > Installation > From PyPI",
+      "path": "README.md",
+      "heading_path": [
+        "humanize",
+        "Installation",
+        "From PyPI"
+      ],
+      "text": "```bash\npython3 -m pip install --upgrade humanize\n```"
+    },
+    {
+      "id": "README.md#humanize > Installation > From source",
+      "path": "README.md",
+      "heading_path": [
+        "humanize",
+        "Installation",
+        "From source"
+      ],
+      "text": "```bash\ngit clone https://github.com/python-humanize/humanize\ncd humanize\npython3 -m pip install -e .\n```"
+    },
+    {
+      "id": "README.md#humanize > Usage > Integer humanization",
+      "path": "README.md",
+      "heading_path": [
+        "humanize",
+        "Usage",
+        "Integer humanization"
+      ],
+      "text": "```pycon\n>>> import humanize\n>>> humanize.intcomma(12345)\n'12,345'\n>>> humanize.intword(123455913)\n'123.5 million'\n>>> humanize.intword(12345591313)\n'12.3 billion'\n>>> humanize.apnumber(4)\n'four'\n>>> humanize.apnumber(41)\n'41'\n```"
+    },
+    {
+      "id": "README.md#humanize > Usage > Date & time humanization",
+      "path": "README.md",
+      "heading_path": [
+        "humanize",
+        "Usage",
+        "Date & time humanization"
+      ],
+      "text": "```pycon\n>>> import humanize\n>>> import datetime as dt\n>>> humanize.naturalday(dt.datetime.now())\n'today'\n>>> humanize.naturaldelta(dt.timedelta(seconds=1001))\n'16 minutes'\n>>> humanize.naturalday(dt.datetime.now() - dt.timedelta(days=1))\n'yesterday'\n>>> humanize.naturalday(dt.date(2007, 6, 5))\n'Jun 05'\n>>> humanize.naturaldate(dt.date(2007, 6, 5))\n'Jun 05 2007'\n>>> humanize.naturaltime(dt.datetime.now() - dt.timedelta(seconds=1))\n'a second ago'\n>>> humanize.naturaltime(dt.datetime.now() - dt.timedelta(seconds=3600))\n'an hour ago'\n```"
+    },
+    {
+      "id": "README.md#humanize > Usage > Precise time delta",
+      "path": "README.md",
+      "heading_path": [
+        "humanize",
+        "Usage",
+        "Precise time delta"
+      ],
+      "text": "```pycon\n>>> import humanize\n>>> import datetime as dt\n>>> delta = dt.timedelta(seconds=3633, days=2, microseconds=123000)\n>>> humanize.precisedelta(delta)\n'2 days, 1 hour and 33.12 seconds'\n>>> humanize.precisedelta(delta, minimum_unit=\"microseconds\")\n'2 days, 1 hour, 33 seconds and 123 milliseconds'\n>>> humanize.precisedelta(delta, suppress=[\"days\"], format=\"%0.4f\")\n'49 hours and 33.1230 seconds'\n```"
+    },
+    {
+      "id": "README.md#humanize > Usage > Precise time delta > Smaller units",
+      "path": "README.md",
+      "heading_path": [
+        "humanize",
+        "Usage",
+        "Precise time delta",
+        "Smaller units"
+      ],
+      "text": "If seconds are too large, set `minimum_unit` to milliseconds or microseconds:\n\n```pycon\n>>> import humanize\n>>> import datetime as dt\n>>> humanize.naturaldelta(dt.timedelta(seconds=2))\n'2 seconds'\n```\n\n```pycon\n>>> delta = dt.timedelta(milliseconds=4)\n>>> humanize.naturaldelta(delta)\n'a moment'\n>>> humanize.naturaldelta(delta, minimum_unit=\"milliseconds\")\n'4 milliseconds'\n>>> humanize.naturaldelta(delta, minimum_unit=\"microseconds\")\n'4 milliseconds'\n```\n\n```pycon\n>>> humanize.naturaltime(delta)\n'now'\n>>> humanize.naturaltime(delta, minimum_unit=\"milliseconds\")\n'4 milliseconds ago'\n>>> humanize.naturaltime(delta, minimum_unit=\"microseconds\")\n'4 milliseconds ago'\n```"
+    },
+    {
+      "id": "README.md#humanize > Usage > File size humanization",
+      "path": "README.md",
+      "heading_path": [
+        "humanize",
+        "Usage",
+        "File size humanization"
+      ],
+      "text": "```pycon\n>>> import humanize\n>>> humanize.naturalsize(1_000_000)\n'1.0 MB'\n>>> humanize.naturalsize(1_000_000, binary=True)\n'976.6 KiB'\n>>> humanize.naturalsize(1_000_000, gnu=True)\n'976.6K'\n```"
+    },
+    {
+      "id": "README.md#humanize > Usage > Human-readable floating point numbers",
+      "path": "README.md",
+      "heading_path": [
+        "humanize",
+        "Usage",
+        "Human-readable floating point numbers"
+      ],
+      "text": "```pycon\n>>> import humanize\n>>> humanize.fractional(1/3)\n'1/3'\n>>> humanize.fractional(1.5)\n'1 1/2'\n>>> humanize.fractional(0.3)\n'3/10'\n>>> humanize.fractional(0.333)\n'333/1000'\n>>> humanize.fractional(1)\n'1'\n```"
+    },
+    {
+      "id": "README.md#humanize > Usage > Scientific notation",
+      "path": "README.md",
+      "heading_path": [
+        "humanize",
+        "Usage",
+        "Scientific notation"
+      ],
+      "text": "```pycon\n>>> import humanize\n>>> humanize.scientific(0.3)\n'3.00 x 10\u207b\u00b9'\n>>> humanize.scientific(500)\n'5.00 x 10\u00b2'\n>>> humanize.scientific(\"20000\")\n'2.00 x 10\u2074'\n>>> humanize.scientific(1**10)\n'1.00 x 10\u2070'\n>>> humanize.scientific(1**10, precision=1)\n'1.0 x 10\u2070'\n>>> humanize.scientific(1**10, precision=0)\n'1 x 10\u2070'\n```"
+    },
+    {
+      "id": "README.md#humanize > Localization",
+      "path": "README.md",
+      "heading_path": [
+        "humanize",
+        "Localization"
+      ],
+      "text": "How to change locale at runtime:\n\n```pycon\n>>> import humanize\n>>> import datetime as dt\n>>> humanize.naturaltime(dt.timedelta(seconds=3))\n'3 seconds ago'\n>>> _t = humanize.i18n.activate(\"ru_RU\")\n>>> humanize.naturaltime(dt.timedelta(seconds=3))\n'3 \u0441\u0435\u043a\u0443\u043d\u0434\u044b \u043d\u0430\u0437\u0430\u0434'\n>>> humanize.i18n.deactivate()\n>>> humanize.naturaltime(dt.timedelta(seconds=3))\n'3 seconds ago'\n```\n\nYou can pass additional parameter `path` to `activate` to specify a path to search\nlocales in.\n\n```pycon\n>>> import humanize\n>>> humanize.i18n.activate(\"xx_XX\")\n<...>\nFileNotFoundError: [Errno 2] No translation file found for domain: 'humanize'\n>>> humanize.i18n.activate(\"pt_BR\", path=\"path/to/my/own/translation/\")\n<gettext.GNUTranslations instance ...>\n```\n\n<!-- usage-end -->\n\nHow to add new phrases to existing locale files:\n\n```sh\nscripts/update-translations.sh\n```\n\nThis extracts new phrases from the source code into `humanize.pot`, merges them into\neach locale's `.po` file and compiles the binary `.mo` catalogs.\n\nHow to add a new locale:\n\n```sh\nmsginit -i humanize.pot -o humanize/locale/<locale name>/LC_MESSAGES/humanize.po --locale <locale name>\n```\n\nWhere `<locale name>` is a locale abbreviation, eg. `en_GB`, `pt_BR` or just `ru`, `fr`\netc.\n\nList the language at the top of this README."
+    },
+    {
+      "id": "docs/filesize.md#Filesize",
+      "path": "docs/filesize.md",
+      "heading_path": [
+        "Filesize"
+      ],
+      "text": "::: humanize.filesize"
+    },
+    {
+      "id": "docs/i18n.md#Internationalisation",
+      "path": "docs/i18n.md",
+      "heading_path": [
+        "Internationalisation"
+      ],
+      "text": "::: humanize.i18n"
+    },
+    {
+      "id": "docs/index.md#humanize",
+      "path": "docs/index.md",
+      "heading_path": [
+        "humanize"
+      ],
+      "text": "Welcome to the humanize API reference.\n\n- [Number](number.md)\n- [Time](time.md)\n- [Filesize](filesize.md)\n- [Lists](lists.md)\n- [I18n](i18n.md)\n\n{%\n   include-markdown \"../README.md\"\n   start=\"<!-- usage-start -->\"\n   end=\"<!-- usage-end -->\"\n   comments=false\n%}"
+    },
+    {
+      "id": "docs/lists.md#Lists",
+      "path": "docs/lists.md",
+      "heading_path": [
+        "Lists"
+      ],
+      "text": "::: humanize.lists"
+    },
+    {
+      "id": "docs/number.md#Number",
+      "path": "docs/number.md",
+      "heading_path": [
+        "Number"
+      ],
+      "text": "::: humanize.number"
+    },
+    {
+      "id": "docs/time.md#Time",
+      "path": "docs/time.md",
+      "heading_path": [
+        "Time"
+      ],
+      "text": "::: humanize.time"
+    }
+  ],
+  "links": [
+    {
+      "section": "README.md#humanize > Usage > Integer humanization",
+      "chunk": "src/humanize/number.py::intcomma",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Usage > Integer humanization",
+      "chunk": "src/humanize/number.py::intword",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Usage > Integer humanization",
+      "chunk": "src/humanize/number.py::apnumber",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Usage > Date & time humanization",
+      "chunk": "src/humanize/time.py::naturaldelta",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Usage > Date & time humanization",
+      "chunk": "src/humanize/time.py::naturaltime",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Usage > Date & time humanization",
+      "chunk": "src/humanize/time.py::naturalday",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Usage > Date & time humanization",
+      "chunk": "src/humanize/time.py::naturaldate",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Usage > Precise time delta",
+      "chunk": "src/humanize/time.py::precisedelta",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Usage > Precise time delta > Smaller units",
+      "chunk": "src/humanize/time.py::naturaldelta",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Usage > Precise time delta > Smaller units",
+      "chunk": "src/humanize/time.py::naturaltime",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Usage > File size humanization",
+      "chunk": "src/humanize/filesize.py::naturalsize",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Usage > Human-readable floating point numbers",
+      "chunk": "src/humanize/number.py::fractional",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Usage > Scientific notation",
+      "chunk": "src/humanize/number.py::scientific",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Localization",
+      "chunk": "src/humanize/i18n.py::activate",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Localization",
+      "chunk": "src/humanize/i18n.py::deactivate",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#humanize > Localization",
+      "chunk": "src/humanize/time.py::naturaltime",
+      "mechanism": "name"
+    }
+  ]
+}
