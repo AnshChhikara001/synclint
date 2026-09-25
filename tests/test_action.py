@@ -55,11 +55,12 @@ def history(tmp_path: Path) -> tuple[Path, dict[str, str]]:
 
 
 def event(
-    base: str, head: str, *, fork: bool = False, number: int = 7
+    base: str, head: str, *, fork: bool = False, author: str = "someone"
 ) -> dict[str, Any]:
     return {
         "pull_request": {
-            "number": number,
+            "number": 7,
+            "user": {"login": author},
             "base": {"sha": base, "repo": {"full_name": "owner/library"}},
             "head": {
                 "sha": head,
@@ -82,7 +83,10 @@ def test_analyses_from_where_the_branch_forked_not_from_the_base_tip(
         *("--base", commits["forked"]),
         *("--head", commits["head"]),
         *("--pull-request", "7"),
+        "--cache",
+        argv[-1],
     ]
+    assert not Path(argv[-1]).is_relative_to(root)
 
 
 def test_inputs_left_empty_fall_back_to_the_command_lines_defaults(
@@ -107,7 +111,7 @@ def test_inputs_left_empty_fall_back_to_the_command_lines_defaults(
     assert "--confidence-threshold" not in argv
 
 
-def test_a_shallow_clone_is_refused_with_the_fix(
+def test_a_shallow_clone_is_refused_with_the_remedy(
     history: tuple[Path, dict[str, str]],
 ) -> None:
     root, commits = history
@@ -145,7 +149,11 @@ def test_the_api_key_reaches_analyse_through_the_environment_and_nowhere_else(
     assert KEY not in "".join(capsys.readouterr())
 
 
-def test_a_fork_without_the_key_is_skipped_with_a_warning(
+@pytest.mark.parametrize(
+    "opened", [{"fork": True}, {"author": "dependabot[bot]"}], ids=["fork", "dependabot"]
+)
+def test_a_pull_request_github_gives_no_secrets_is_skipped_with_a_warning(
+    opened: dict[str, Any],
     workflow: list[Sequence[str]],
     history: tuple[Path, dict[str, str]],
     tmp_path: Path,
@@ -153,8 +161,8 @@ def test_a_fork_without_the_key_is_skipped_with_a_warning(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _, commits = history
-    path = tmp_path / "fork.json"
-    path.write_text(json.dumps(event(commits["base"], commits["head"], fork=True)))
+    path = tmp_path / "secretless.json"
+    path.write_text(json.dumps(event(commits["base"], commits["head"], **opened)))
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(path))
     monkeypatch.delenv("OPENAI_API_KEY")
 

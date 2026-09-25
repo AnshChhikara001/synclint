@@ -12,8 +12,9 @@ import argparse
 import json
 import os
 import subprocess
+import tempfile
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,10 @@ def command(event: Mapping[str, Any], root: Path, inputs: Inputs) -> list[str]:
 
     An empty input is left off, so the command line's own default applies. A
     documentation glob input holds one glob per line.
+
+    Recorded answers go to the temporary directory rather than the default,
+    which is relative and would land in the checkout: a container is thrown
+    away after one run, so there is nothing to keep them for.
     """
     pull = event["pull_request"]
     head = pull["head"]["sha"]
@@ -56,16 +61,13 @@ def command(event: Mapping[str, Any], root: Path, inputs: Inputs) -> list[str]:
         *("--base", base),
         *("--head", head),
         *("--pull-request", str(pull["number"])),
+        *("--cache", str(Path(tempfile.gettempdir()) / "synclint")),
     ]
-    if inputs.model:
-        argv += ["--model", inputs.model]
-    for glob in inputs.documentation_glob.split("\n"):
-        if glob.strip():
-            argv += ["--documentation-glob", glob.strip()]
-    if inputs.confidence_threshold:
-        argv += ["--confidence-threshold", inputs.confidence_threshold]
-    if inputs.ceiling:
-        argv += ["--ceiling", inputs.ceiling]
+    for field in fields(inputs):
+        flag = "--" + field.name.replace("_", "-")
+        for value in getattr(inputs, field.name).split("\n"):
+            if value.strip():
+                argv += [flag, value.strip()]
     return argv
 
 
@@ -74,11 +76,11 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     The API key arrives as OPENAI_API_KEY, set by action.yml from the
     `api-key` input, and is read from there by the provider's SDK. It is never
-    an argument, because arguments are what a failing run prints.
+    an argument, because the runner prints a container's arguments in the log.
     """
     parser = argparse.ArgumentParser(prog="synclint-action")
-    for name in ("model", "documentation-glob", "confidence-threshold", "ceiling"):
-        parser.add_argument(f"--{name}", default="")
+    for field in fields(Inputs):
+        parser.add_argument("--" + field.name.replace("_", "-"), default="")
     inputs = Inputs(**vars(parser.parse_args(argv)))
 
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
@@ -88,13 +90,16 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
     if not os.environ.get("OPENAI_API_KEY"):
         pull = event["pull_request"]
-        # GitHub withholds secrets from a pull request opened from a fork, so a
-        # missing key there is expected rather than a misconfiguration, and
-        # failing every outside contributor's checks for it would be noise.
-        if (pull["head"]["repo"] or {}).get("full_name") != pull["base"]["repo"]["full_name"]:
+        # GitHub withholds Actions secrets from a pull request opened from a
+        # fork, and from one Dependabot opened, so a missing key there is
+        # expected rather than a misconfiguration, and failing those checks
+        # for it would be noise.
+        head_repository = (pull["head"]["repo"] or {}).get("full_name")
+        from_fork = head_repository != pull["base"]["repo"]["full_name"]
+        if from_fork or pull["user"]["login"] == "dependabot[bot]":
             print(
-                "::warning::synclint skipped: pull requests from forks are not "
-                "given the repository's secrets, so there is no api-key"
+                "::warning::synclint skipped: pull requests from forks and from "
+                "Dependabot are not given Actions secrets, so there is no api-key"
             )
             return
         raise SystemExit(
