@@ -58,7 +58,8 @@ class Scored:
     model's judgement earned.
 
     `repair` scores the planted finding's repair, and is `None` wherever the
-    planted finding was not found.
+    planted finding was not found, or was a disappearance, which is never
+    repaired.
     """
 
     id: str
@@ -294,6 +295,8 @@ def _repair_score(report: Report, case: Case) -> RepairOutcome | None:
             )
     for flag in report.flags:
         if (flag.finding.section, flag.finding.chunk) == planted:
+            if flag.cause == "vanished":
+                return None
             if flag.attempt is None:
                 return RepairOutcome(flag.shape, flag.cause, None, correct=False, kept=None)
             return _judged(

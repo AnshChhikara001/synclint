@@ -9,8 +9,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from synclint.analyse import suspects
-from synclint.changes import is_test_file, touched_chunks
+from synclint.analyse import disappearances, suspects
+from synclint.changes import chunk_diff, is_test_file
 from synclint.chunks import extract_chunks
 from synclint.git import file_at, run
 from synclint.index import Index, build_index
@@ -22,6 +22,7 @@ KINDS = (
     "changed-default",
     "removed-capability",
     "contradicted-claim",
+    "deleted-chunk",
 )
 
 
@@ -37,6 +38,7 @@ class DecoyKind:
 
     changes_chunks: bool
     test_files_only: bool = False
+    moves_chunks: bool = False
 
 
 DECOY_KINDS = {
@@ -45,6 +47,7 @@ DECOY_KINDS = {
     "comment-edit": DecoyKind(changes_chunks=False),
     "test-only": DecoyKind(changes_chunks=False, test_files_only=True),
     "formatting": DecoyKind(changes_chunks=False),
+    "moved-chunk": DecoyKind(changes_chunks=False, moves_chunks=True),
 }
 
 
@@ -119,13 +122,15 @@ class Audit:
     `faults` are wrong things about the corpus itself and must be empty.
     `reachable` and `unreachable` measure synclint rather than the corpus: a
     case is reachable when its expected section and chunk meet as a suspect,
-    which is the most a run can get right before the model is asked anything.
+    or as a disappearance where the case deletes the chunk, which is the most
+    a run can get right before the model is asked anything.
     A case with a fault appears in neither, so unreachable means one thing only
     — drift correctly recorded that synclint cannot yet get to.
 
-    `suspected` names the decoys that reach the model, where a false positive
-    is still possible. A decoy missing from it raised no suspect at all and so
-    cannot produce a finding whatever a model would have said about it.
+    `suspected` names the decoys that reach the model, or raise a disappearance,
+    where a false positive is still possible. A decoy missing from it raised no
+    suspect at all and so cannot produce a finding whatever a model would have
+    said about it.
 
     The cases and decoys are carried along so that a report can be rendered from
     this alone, the way `analyse.Report` carries what `render` needs.
@@ -231,9 +236,13 @@ def audit_corpus(corpus: Corpus) -> Audit:
             # statement about synclint, and a faulty case cannot make one.
             faults.extend(found)
             continue
+        ref = case_ref(case.id)
         pairs = {
             (suspect.section.id, suspect.change.chunk)
-            for suspect in suspects(corpus.root, index, BASE_REF, case_ref(case.id))
+            for suspect in suspects(corpus.root, index, BASE_REF, ref)
+        } | {
+            (flag.finding.section, flag.finding.chunk)
+            for flag in disappearances(corpus.root, index, BASE_REF, ref)
         }
         reached = reachable if (case.section, case.chunk) in pairs else unreachable
         reached.append(case.id)
@@ -244,7 +253,12 @@ def audit_corpus(corpus: Corpus) -> Audit:
         if found:
             faults.extend(found)
             continue
-        if suspects(corpus.root, index, BASE_REF, decoy_ref(decoy.id)):
+        # A disappearance never reaches the model, but it is a finding all the
+        # same, and so a false positive a decoy could cause.
+        ref = decoy_ref(decoy.id)
+        if suspects(corpus.root, index, BASE_REF, ref) or disappearances(
+            corpus.root, index, BASE_REF, ref
+        ):
             suspected.append(decoy.id)
 
     faults.extend(_unclaimed(corpus))
@@ -273,8 +287,11 @@ def _decoy_faults(corpus: Corpus, decoy: Decoy) -> list[str]:
     promise = DECOY_KINDS[decoy.kind]
     ref = decoy_ref(decoy.id)
     paths = _changed_paths(corpus.root, ref)
+    diff = chunk_diff(corpus.root, BASE_REF, ref)
+    # A chunk deleted is as much a change to it as a chunk rewritten.
     touched = sorted(
-        change.chunk for change in touched_chunks(corpus.root, BASE_REF, ref)
+        [change.chunk for change in diff.changed]
+        + [chunk.chunk for chunk in diff.vanished]
     )
     faults = []
     if promise.changes_chunks and not touched:
@@ -287,7 +304,12 @@ def _decoy_faults(corpus: Corpus, decoy: Decoy) -> list[str]:
             f"{decoy.id}: kind {decoy.kind} promises no changed chunk, "
             f"and this commit changes {', '.join(touched)}"
         )
-    # `changed_chunks` drops test files whole, so a test-only decoy would clear
+    if promise.moves_chunks and not diff.moved:
+        faults.append(
+            f"{decoy.id}: kind {decoy.kind} promises a chunk moved to another "
+            "file, and this commit moves none"
+        )
+    # `chunk_diff` drops test files whole, so a test-only decoy would clear
     # the chunk check even if it rewrote half the library alongside. What makes
     # it test-only is where it lands, and that is worth saying separately.
     if promise.test_files_only:
@@ -350,15 +372,18 @@ def _chunk_faults(root: Path, case: Case) -> list[str]:
     a mistake in the corpus.
     """
     ref = case_ref(case.id)
-    # At the case's own revision rather than at the base, because a case that
-    # adds a capability names a chunk that exists only once it is applied.
-    if not _defines(root, ref, case.chunk):
-        return [f"{case.id}: no chunk {case.chunk} at {ref}"]
+    # At either revision, because a case that adds a capability names a chunk
+    # that exists only once it is applied, and one that deletes a chunk names
+    # one that exists only before.
     if not _defines(root, BASE_REF, case.chunk):
-        # Added by the case. `changed_chunks` reports only chunks on both sides
-        # of the diff, so there is nothing to compare and nothing to check.
+        if not _defines(root, ref, case.chunk):
+            return [f"{case.id}: no chunk {case.chunk} at {BASE_REF} or {ref}"]
+        # Added by the case. `chunk_diff` compares only chunks that were there
+        # before, so there is nothing to compare and nothing to check.
         return []
-    touched = {change.chunk for change in touched_chunks(root, BASE_REF, ref)}
+    diff = chunk_diff(root, BASE_REF, ref)
+    touched = {change.chunk for change in diff.changed}
+    touched |= {chunk.chunk for chunk in diff.vanished}
     if case.chunk not in touched:
         return [f"{case.id}: the commit at {ref} does not change {case.chunk}"]
     return []

@@ -7,8 +7,9 @@
 # case to be rewritten.
 #
 # Kinds: renamed-parameter, changed-default, removed-capability,
-# contradicted-claim. Five of each of the first three; two of the last, for the
-# reason corpus/README.md gives under "What drift is not".
+# contradicted-claim, deleted-chunk. Five of each of the first three; two of
+# contradicted-claim, for the reason corpus/README.md gives under "What drift
+# is not"; one deleted-chunk, which synclint finds without asking a model.
 #
 # `repair_says` and `repair_drops` are what a correct repair of the section
 # contains and no longer contains, matched exactly. They are written in each
@@ -170,14 +171,27 @@ description = "the catalogue gained merge and entries, where the page says every
 repair_says = ["merg"]
 repair_drops = []
 
+# A deleted chunk is never repaired, so its ground truth is only what the audit
+# needs to tell the section as it stands from a correct repair.
+
+[[case]]
+id = "catalogue-drops-count"
+kind = "deleted-chunk"
+section = "docs/catalogue.md#Catalogue > Counting"
+chunk = "bookshelf/catalogue.py::Catalogue.count"
+description = "Catalogue.count is gone"
+repair_says = []
+repair_drops = ["Catalogue.count()"]
+
 # Decoys: changes that must produce no finding, so that a precision figure has
 # negative cases to be computed over. A decoy carries no section and no chunk
 # because what it asserts is an absence. Its kind is a claim about the change —
 # `internal-refactor` and `added-parameter` really do change a chunk, the other
-# three really do not — and the audit holds each decoy to it.
+# four really do not, and `moved-chunk` really does move one — and the audit
+# holds each decoy to it.
 #
 # Kinds: internal-refactor, added-parameter, comment-edit, formatting,
-# test-only.
+# test-only, moved-chunk.
 
 [[decoy]]
 id = "is-valid-weights-hoisted"
@@ -250,3 +264,12 @@ description = "read_csv takes an encoding the page never mentions"
 id = "save-gains-compression"
 kind = "added-parameter"
 description = "save can gzip the file, which the page never mentions"
+
+# A chunk moved to another module, word for word, is the same chunk. Followed
+# there, it has nothing to compare; not followed, its page would be reported as
+# naming deleted code.
+
+[[decoy]]
+id = "load-moves-to-its-own-module"
+kind = "moved-chunk"
+description = "load moves to a module of its own, still imported from storage"

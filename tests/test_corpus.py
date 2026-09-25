@@ -258,7 +258,8 @@ def test_a_manifest_pointing_at_what_is_not_there_is_a_fault(tmp_path: Path) -> 
     audit = audit_corpus(build_corpus(source, tmp_path / "built"))
 
     assert audit.faults == (
-        "find-query-renamed: no chunk catalogue.py::search at case/find-query-renamed",
+        "find-query-renamed: no chunk catalogue.py::search at base or "
+        "case/find-query-renamed",
         "find-query-renamed: the base index has no section "
         "docs/catalogue.md#Catalogue > Borrowing",
     )
@@ -299,7 +300,8 @@ def test_an_unknown_kind_and_an_unclaimed_overlay_are_faults(tmp_path: Path) -> 
 
     assert audit.faults == (
         "find-query-renamed: kind renamed-argument is not one of "
-        "renamed-parameter, changed-default, removed-capability, contradicted-claim",
+        "renamed-parameter, changed-default, removed-capability, contradicted-claim, "
+        "deleted-chunk",
         "half-written: an overlay with no case in the manifest",
     )
 
@@ -317,7 +319,7 @@ def test_the_command_line_prints_the_shape_the_reach_and_the_faults() -> None:
     )
 
     assert "2 cases: 1 renamed-parameter, 1 changed-default." in printed
-    assert "1 of 2 reachable as a suspect; 1 unreachable:" in printed
+    assert "1 of 2 reachable; 1 unreachable:" in printed
     assert "    shelf-capacity-default" in printed
     assert "1 fault:" in printed
     assert "    half-written: an overlay with no case in the manifest" in printed
@@ -335,7 +337,7 @@ def test_the_command_line_says_so_when_the_corpus_is_sound() -> None:
         )
     )
 
-    assert "1 of 1 reachable as a suspect." in printed
+    assert "1 of 1 reachable." in printed
     assert "No faults." in printed
     # A corpus with no decoys says nothing about decoys rather than "0 decoys".
     assert "decoy" not in printed
@@ -569,7 +571,7 @@ def test_an_unknown_decoy_kind_and_an_unclaimed_decoy_overlay_are_faults(
 
     assert audit.faults == (
         "find-reflowed: kind whitespace is not one of internal-refactor, "
-        "added-parameter, comment-edit, test-only, formatting",
+        "added-parameter, comment-edit, test-only, formatting, moved-chunk",
         "half-written: an overlay with no decoy in the manifest",
     )
 
@@ -622,7 +624,7 @@ def audited(shipped: Corpus) -> Audit:
     return audit_corpus(shipped)
 
 
-def test_the_shipped_corpus_plants_seventeen_cases_and_holds_together(
+def test_the_shipped_corpus_plants_eighteen_cases_and_holds_together(
     shipped: Corpus, audited: Audit
 ) -> None:
     corpus = shipped
@@ -630,17 +632,18 @@ def test_the_shipped_corpus_plants_seventeen_cases_and_holds_together(
     audit = audited
 
     assert audit.faults == ()
-    assert len(corpus.cases) == 17
+    assert len(corpus.cases) == 18
     kinds = Counter(case.kind for case in corpus.cases)
     assert set(kinds) == set(KINDS)
     # Not five of each any more. `contradicted-claim` holds the two cases left
     # when `undocumented-feature` split, and planting more needs a recording
     # pass, so what the corpus owes is every kind represented, not a balance.
-    assert min(kinds.values()) >= 2
+    # `deleted-chunk` is found without a model, so one case says all it can.
+    assert min(count for kind, count in kinds.items() if kind != "deleted-chunk") >= 2
     # How many of them synclint reaches is a measurement rather than a
     # requirement — the manifest is ground truth, and a case nothing reaches is
     # a gap to be reported. What the corpus owes is an answer for every case.
-    assert len(audit.reachable) + len(audit.unreachable) == 17
+    assert len(audit.reachable) + len(audit.unreachable) == 18
 
 
 CATALOGUE_AND_SHELVE = """
@@ -737,14 +740,16 @@ def test_analyse_over_the_corpus_reports_the_cases_the_manifest_expects(
     assert reported
 
 
-def test_the_shipped_corpus_plants_thirteen_decoys_across_every_kind(
+def test_the_shipped_corpus_plants_fourteen_decoys_across_every_kind(
     shipped: Corpus, audited: Audit
 ) -> None:
     assert audited.faults == ()
-    assert len(shipped.decoys) == 13
+    assert len(shipped.decoys) == 14
     kinds = Counter(decoy.kind for decoy in shipped.decoys)
     assert set(kinds) == set(DECOY_KINDS)
-    assert min(kinds.values()) >= 2
+    # A move followed raises nothing whatever a model thinks, so one decoy
+    # says all a second would.
+    assert min(count for kind, count in kinds.items() if kind != "moved-chunk") >= 2
 
 
 def test_a_decoy_nothing_reaches_cannot_produce_a_finding(
@@ -755,16 +760,18 @@ def test_a_decoy_nothing_reaches_cannot_produce_a_finding(
         decoy.id for decoy in shipped.decoys if decoy.id not in audited.suspected
     ]
 
-    assert len(silent) == 6
+    assert len(silent) == 7
     for decoy_id in silent:
         client = ModelClient(
             DriftedModel(), pricing=Pricing(input=0.0, output=0.0), ceiling=1.0
         )
         report = analyse(shipped.root, index, BASE_REF, decoy_ref(decoy_id), client)
 
-        # Asked with a model that calls everything drift, these six still report
-        # nothing: comments, formatting and test code do not survive a parse, so
-        # there is no suspect to put a question about and nothing is spent.
+        # Asked with a model that calls everything drift, these seven still
+        # report nothing: comments, formatting and test code do not survive a
+        # parse, and a chunk moved word for word is followed and compares
+        # equal, so there is no suspect to put a question about and nothing is
+        # spent.
         assert report.findings == ()
         assert report.spend.calls == 0
 
@@ -785,3 +792,65 @@ def test_a_decoy_that_reaches_the_model_is_only_cleared_by_its_judgement(
         # is what makes them worth having: nothing structural saves them, and the
         # rate at which a real model clears them is the precision figure #6 owes.
         assert report.findings
+
+
+SHELVE_ONLY = """
+    def shelve(book):
+        return book
+    """
+
+FIND_DELETED = {
+    "id": "find-deleted",
+    "kind": "deleted-chunk",
+    "section": "docs/catalogue.md#Catalogue > Finding books",
+    "chunk": "catalogue.py::find",
+    "description": "find is gone",
+    "repair_says": [],
+    "repair_drops": ["find(query)"],
+}
+
+
+def test_a_case_that_deletes_the_chunk_its_section_names_is_reachable(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "corpus"
+    write_corpus(
+        source,
+        base={"catalogue.py": CATALOGUE_AND_SHELVE, "docs/catalogue.md": DOCS},
+        cases={"find-deleted": {"catalogue.py": SHELVE_ONLY}},
+        manifest=[FIND_DELETED],
+    )
+
+    audit = audit_corpus(build_corpus(source, tmp_path / "built"))
+
+    assert audit.faults == ()
+    assert audit.reachable == ("find-deleted",)
+
+
+FIND_MOVED = {"id": "find-moves", "kind": "moved-chunk", "description": "find moves"}
+
+
+def test_a_decoy_that_moves_a_chunk_word_for_word_raises_nothing(tmp_path: Path) -> None:
+    audit = audit_decoys(
+        tmp_path,
+        decoys={"find-moves": {"catalogue.py": SHELVE_ONLY, "finding.py": CATALOGUE}},
+        decoy_manifest=[FIND_MOVED],
+        base={"catalogue.py": CATALOGUE_AND_SHELVE, "docs/catalogue.md": DOCS},
+    )
+
+    assert audit.faults == ()
+    # Not followed, the page naming `find` would read as naming deleted code.
+    assert audit.suspected == ()
+
+
+def test_a_move_decoy_that_moves_nothing_is_a_fault(tmp_path: Path) -> None:
+    audit = audit_decoys(
+        tmp_path,
+        decoys={"find-moves": {"catalogue.py": FIND_REFLOWED}},
+        decoy_manifest=[FIND_MOVED],
+    )
+
+    assert audit.faults == (
+        "find-moves: kind moved-chunk promises a chunk moved to another file, "
+        "and this commit moves none",
+    )

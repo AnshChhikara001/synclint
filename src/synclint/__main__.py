@@ -453,8 +453,9 @@ def _case_lines(audit: Audit) -> list[str]:
     lines = [
         f"{len(audit.cases)} case{_plural(len(audit.cases))}: "
         f"{_shape(case.kind for case in audit.cases)}.",
-        f"{reached} of {total} reachable as "
-        f"{'a suspect' if reached == 1 else 'suspects'}",
+        # A deleted chunk's section is reached as a disappearance rather than
+        # a suspect; either is the most a run can find before the model.
+        f"{reached} of {total} reachable",
     ]
     if audit.unreachable:
         lines[-1] += f"; {len(audit.unreachable)} unreachable:"
