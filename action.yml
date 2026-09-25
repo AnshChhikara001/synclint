@@ -1,0 +1,44 @@
+name: synclint
+description: Finds the documentation a pull request made inaccurate, repairs what it safely can, and flags the rest.
+author: Ansh Chhikara
+branding:
+  icon: book-open
+  color: blue
+
+inputs:
+  api-key:
+    description: OpenAI API key. Pass it from a repository secret, never inline.
+    default: ""
+  github-token:
+    description: Token the comment and the pull request of repairs are written with. Needs contents and pull-requests write.
+    default: ${{ github.token }}
+  documentation-glob:
+    description: Markdown that counts as documentation, one glob per line, relative to the repository root.
+    default: "README.md\ndocs/**/*.md"
+  model:
+    description: The model to ask. Must be one synclint has a price for, or the spend ceiling cannot be enforced.
+    default: "gpt-5.4-mini"
+  confidence-threshold:
+    description: The model's confidence, 0 to 1, a repair inside the gate needs before it is proposed. No value proposes a repair outside the gate.
+    default: "0.9"
+  ceiling:
+    description: Dollars one run may spend before it stops. Checked before each call, not after.
+    default: "0.25"
+
+runs:
+  using: docker
+  image: Dockerfile
+  # The key goes in as the environment, never as an argument: the runner
+  # echoes a container's arguments into the log, and masking is a backstop.
+  env:
+    OPENAI_API_KEY: ${{ inputs.api-key }}
+    GITHUB_TOKEN: ${{ inputs.github-token }}
+  args:
+    - --model
+    - ${{ inputs.model }}
+    - --documentation-glob
+    - ${{ inputs.documentation-glob }}
+    - --confidence-threshold
+    - ${{ inputs.confidence-threshold }}
+    - --ceiling
+    - ${{ inputs.ceiling }}
