@@ -1,0 +1,43 @@
+# Rebuilds the committed index when code or documentation lands on main, so
+# that a pull request is analysed against it rather than against one built for
+# the run. A run that misses, or loses a race with the next push, costs nothing
+# worse than that: analyse judges an index by what changed since it was built,
+# and builds its own when the committed one is behind.
+name: index
+
+on:
+  push:
+    branches: [main]
+    # The files the index reads, as the default documentation globs name them.
+    # A push that touches none of them leaves the index describing it already.
+    paths: ["**.py", "README.md", "docs/**/*.md"]
+
+permissions:
+  contents: write
+
+# One at a time, so two quick pushes do not race each other to main.
+concurrency:
+  group: index
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Another repository installs synclint from git instead:
+      #   pip install git+https://github.com/AnshChhikara001/synclint@main
+      - run: pip install .
+      - run: python -m synclint index . --out .synclint/index.json
+      # A push made with the workflow's own token starts no workflow, so this
+      # commit does not set off another rebuild.
+      - name: Commit the index
+        run: |
+          git add .synclint/index.json
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "rebuild the index at ${GITHUB_SHA::7}"
+          git push

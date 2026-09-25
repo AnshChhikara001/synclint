@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 from dataclasses import replace
 from pathlib import Path
@@ -10,6 +11,7 @@ from synclint.__main__ import main
 from synclint.analyse import disappearances
 from synclint.index import (
     DEFAULT_DOCUMENTATION_GLOBS,
+    DEFAULT_INDEX_PATH,
     build_index,
     build_index_at,
     index_for,
@@ -28,6 +30,8 @@ SOURCE = """
     """
 
 COMMITTED = Path(".synclint/index.json")
+
+WORKFLOW = Path(__file__).parent.parent / ".github/workflows/index.yml"
 
 
 def git(root: Path, *arguments: str) -> str:
@@ -224,7 +228,6 @@ def test_an_index_reads_back_with_the_revision_and_documentation_it_was_built_fr
 def test_the_command_line_records_the_commit_it_indexed(tmp_path: Path) -> None:
     start(tmp_path, {"README.md": DOCS, "src/fetch.py": SOURCE})
     out = tmp_path / COMMITTED
-    out.parent.mkdir()
 
     main(["index", str(tmp_path), "--out", str(out)])
 
@@ -268,3 +271,13 @@ def test_analyse_names_the_committed_index_when_it_used_it(
         f"Index: {COMMITTED}, built at {built_at[:7]}."
         in capsys.readouterr().out
     )
+
+
+def test_the_rebuild_workflow_watches_the_files_the_index_reads() -> None:
+    # Read with a regex, as action.yml is: one line of a file this repository
+    # owns does not warrant a YAML parser.
+    workflow = WORKFLOW.read_text()
+    [paths] = re.findall(r"^    paths: (\[.*\])$", workflow, re.M)
+
+    assert json.loads(paths) == ["**.py", *DEFAULT_DOCUMENTATION_GLOBS]
+    assert f"--out {DEFAULT_INDEX_PATH}" in workflow

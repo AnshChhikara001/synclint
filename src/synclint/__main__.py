@@ -265,6 +265,9 @@ def _index(arguments: argparse.Namespace) -> None:
     )
     document = replace(index, revision=working_revision(arguments.root, globs)).to_json()
     if arguments.out:
+        # The first rebuild in a repository writes to a directory nothing has
+        # made yet.
+        arguments.out.parent.mkdir(parents=True, exist_ok=True)
         arguments.out.write_text(document, encoding="utf-8")
     else:
         sys.stdout.write(document)
