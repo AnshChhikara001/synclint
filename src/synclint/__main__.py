@@ -386,17 +386,21 @@ def render(report: Report) -> str:
     """Render a report for a terminal."""
     # Counted over sections rather than findings: one section can drift against
     # two changed chunks, and "1 section; 2 have drifted" reads as nonsense.
-    drifted = len({finding.section for finding in report.findings})
-    lines = [
+    drifted = len({f.section for f in report.findings if f.kind == "drift"})
+    gone = len({f.section for f in report.findings if f.kind == "disappearance"})
+    headline = (
         f"Verified {len(report.verified)} section{_plural(len(report.verified))}; "
-        f"{drifted} {'has' if drifted == 1 else 'have'} drifted.",
-        "",
-    ]
+        f"{drifted} {'has' if drifted == 1 else 'have'} drifted."
+    )
+    if gone:
+        headline += f" {gone} {'names' if gone == 1 else 'name'} code the change deleted."
+    lines = [headline, ""]
     repairs = {repair.finding: repair for repair in report.repairs}
     flags = {flag.finding: flag for flag in report.flags}
     for finding in report.findings:
+        deleted = ", deleted" if finding.kind == "disappearance" else ""
         lines += [
-            f"{finding.section}  ({finding.chunk})",
+            f"{finding.section}  ({finding.chunk}{deleted})",
             f"    {finding.explanation}",
             "",
         ]

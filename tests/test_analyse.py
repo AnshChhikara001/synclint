@@ -895,3 +895,17 @@ def test_a_disappearance_is_reported_even_past_the_spend_ceiling(tmp_path: Path)
 
     assert [f.kind for f in report.findings] == ["disappearance"]
     assert report.unchecked == 1
+
+
+def test_the_command_line_sets_a_disappearance_apart_from_drift(tmp_path: Path) -> None:
+    start(tmp_path, {"src/http.py": WAITING_SOURCE, "README.md": WAITING_DOCS})
+    index = build_index(tmp_path)
+    commit(tmp_path, {"src/http.py": BASE_SOURCE}, "retry without waiting")
+
+    report = analyse(tmp_path, index, "main~1", "main", client(ScriptedModel(True)))
+    printed = render(report)
+
+    assert printed.startswith(
+        "Verified 0 sections; 0 have drifted. 1 names code the change deleted.\n"
+    )
+    assert "README.md#Fetching > Waiting  (src/http.py::backoff, deleted)" in printed

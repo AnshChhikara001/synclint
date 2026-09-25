@@ -119,10 +119,17 @@ def summary(
     section with any finding a human has to look at is flagged, even if another
     finding against it was repaired.
     """
+    # A section naming deleted code was never checked, and has its own list:
+    # nothing about it is a judgement, and nothing a model says could clear it.
+    vanished = [flag for flag in report.flags if flag.cause == "vanished"]
+    flags = [flag for flag in report.flags if flag.cause != "vanished"]
+    gone = {flag.finding.section for flag in vanished}
     drifted = {finding.section for finding in report.findings}
-    flagged = {flag.finding.section for flag in report.flags} | {
-        held.repair.finding.section for held in routing.held
-    }
+    flagged = (
+        {flag.finding.section for flag in flags}
+        | {held.repair.finding.section for held in routing.held}
+        | (gone & set(report.verified))
+    )
     repaired = {repair.finding.section for repair in routing.proposed} - flagged
     accurate = [section for section in report.verified if section not in drifted]
 
@@ -133,10 +140,15 @@ def summary(
             f"linked to the code this pull request changes: {len(accurate)} accurate, "
             f"{len(repaired)} repaired, {len(flagged)} flagged."
         )
-    else:
+    elif not gone:
         lines.append(
             "synclint found no documentation linked to the code this pull request "
             "changes, so there was nothing to check."
+        )
+    if gone:
+        lines.append(
+            f"\n{_count(len(gone), 'section')} {'names' if len(gone) == 1 else 'name'} "
+            "code this pull request deletes."
         )
     if report.unchecked:
         lines.append(
@@ -161,9 +173,18 @@ def summary(
         if degraded is not None:
             lines += _details("The repair", repair.diff)
 
-    if report.flags or routing.held:
+    if vanished:
+        lines.append("\n### Names code this pull request deletes")
+    for flag in vanished:
+        lines += [
+            "",
+            f"{_heading(flag.finding.section, links)} — {flag.finding.explanation}",
+            f"Not repaired: {flag.reason.rstrip('.')}.",
+        ]
+
+    if flags or routing.held:
         lines.append("\n### Flagged")
-    for flag in report.flags:
+    for flag in flags:
         lines += [
             "",
             f"{_heading(flag.finding.section, links)} — {flag.finding.explanation}",
@@ -215,7 +236,11 @@ def publish(
             f"{root} does not hold {pull.head}, the head of #{number}; it needs a "
             "clone with full history"
         ) from None
-    files = {path: _read(root, pull.head, path) for path in map(path_of, report.verified)}
+    # Every section the comment names, checked or not, so that each is linked.
+    sections = dict.fromkeys(
+        report.verified + tuple(finding.section for finding in report.findings)
+    )
+    files = {path: _read(root, pull.head, path) for path in map(path_of, sections)}
     routing = route(report, files)
 
     opened: str | None = None
@@ -237,7 +262,7 @@ def publish(
 
     links = {
         section: link
-        for section in report.verified
+        for section in sections
         if (link := _section_link(repository, pull.head, section, files)) is not None
     }
     body = summary(report, routing, links=links, pull=opened, degraded=degraded)

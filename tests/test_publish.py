@@ -190,6 +190,46 @@ def test_a_run_stopped_at_its_ceiling_says_the_answer_is_incomplete() -> None:
     assert "2 suspects never checked" in body
 
 
+def gone(section: str = SAVING_ID) -> Flag:
+    return Flag(
+        finding=Finding(
+            section=section,
+            chunk="library/io.py::save",
+            explanation="It names `save`, which no longer exists.",
+            kind="disappearance",
+        ),
+        reason="the code it describes is gone",
+        original=SAVING,
+        attempt=None,
+        cause="vanished",
+    )
+
+
+def test_a_section_naming_deleted_code_is_listed_apart_from_the_flags() -> None:
+    run = report(flags=(gone(), flagged()))
+    body = summary(run, route(run, FILES), links={})
+    listed = body.index("### Names code this pull request deletes")
+    assert body.index("It names `save`", listed) < body.index("### Flagged")
+    assert "A missing file now raises." in body[body.index("### Flagged") :]
+    assert "1 section names code this pull request deletes" in body
+
+
+def test_a_run_whose_only_findings_are_deleted_code_does_not_say_nothing_was_checked() -> (
+    None
+):
+    run = report(flags=(gone(),), verified=())
+    body = summary(run, route(run, FILES), links={})
+    assert "nothing to check" not in body
+    assert "1 section names code this pull request deletes" in body
+
+
+def test_a_section_naming_deleted_code_is_not_counted_among_those_checked() -> None:
+    run = report(flags=(gone(),), verified=(FETCHING_ID,))
+    body = summary(run, route(run, FILES), links={})
+    assert "checked 1 documentation section" in body
+    assert "1 accurate, 0 repaired, 0 flagged" in body
+
+
 # The I/O around them, against a GitHub that is only a dictionary.
 
 
@@ -315,6 +355,17 @@ def test_publish_links_each_section_to_the_lines_it_reads_on(
     blob = f"https://github.com/{REPOSITORY}/blob/{head}/docs/usage.md?plain=1"
     assert f"[{FETCHING_ID}]({blob}#L5-L5)" in comment["body"]
     assert f"[{LOADING_ID}]({blob}#L13-L13)" in comment["body"]
+
+
+def test_publish_links_a_section_naming_deleted_code_too(
+    clone: tuple[Path, str],
+) -> None:
+    root, head = clone
+    github = github_at(head)
+    publish(report(flags=(gone(),), verified=()), root, github, REPOSITORY, 7)
+    (comment,) = github.bodies("POST", "/issues/7/comments")
+    blob = f"https://github.com/{REPOSITORY}/blob/{head}/docs/usage.md?plain=1"
+    assert f"[{SAVING_ID}]({blob}#L9-L9)" in comment["body"]
 
 
 def test_publish_edits_its_own_comment_rather_than_adding_another(
