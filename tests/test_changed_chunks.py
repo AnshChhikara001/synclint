@@ -1,12 +1,15 @@
 from textwrap import dedent
 
-import pytest
-
-from synclint.changes import changed_chunks, is_test_file
+from synclint.changes import ChunkChange, compare, is_test_file
 
 
 def source(text: str) -> str:
     return dedent(text).lstrip()
+
+
+def changed_chunks(before: str, after: str, path: str) -> list[ChunkChange]:
+    """What changed in one file edited in place."""
+    return list(compare({path: before}, {path: after}).changed)
 
 
 def test_reports_a_chunk_whose_body_changed() -> None:
@@ -140,9 +143,73 @@ def test_a_changed_class_carries_its_own_source_and_not_its_methods() -> None:
     assert "SECONDS_BETWEEN_ATTEMPTS" not in change.after
 
 
-def test_refuses_source_that_does_not_parse() -> None:
-    with pytest.raises(SyntaxError):
-        changed_chunks("def fetch(:", "def fetch(:", "src/http.py")
+def test_a_file_that_stops_parsing_is_neither_changed_nor_vanished() -> None:
+    diff = compare({"src/http.py": "def fetch(url):\n    return url\n"}, {"src/http.py": "def fetch(:"})
+
+    assert diff.changed == ()
+    assert diff.vanished == ()
+
+
+RETRY = source(
+    """
+    def backoff(attempt):
+        return 2 ** attempt
+    """
+)
+
+
+def test_a_chunk_deleted_from_its_file_has_vanished() -> None:
+    diff = compare({"src/http.py": RETRY}, {"src/http.py": "PAUSE = 1\n"})
+
+    assert [chunk.chunk for chunk in diff.vanished] == ["src/http.py::backoff"]
+    assert diff.vanished[0].before.startswith("def backoff(attempt)")
+    assert diff.changed == ()
+    assert diff.moved == ()
+
+
+def test_a_chunk_moved_to_another_file_is_followed_and_compared_there() -> None:
+    diff = compare(
+        {"src/http.py": RETRY},
+        {"src/http.py": "PAUSE = 1\n", "src/wait.py": RETRY.replace("2 **", "3 **")},
+    )
+
+    assert diff.vanished == ()
+    assert diff.moved == (("src/http.py::backoff", "src/wait.py::backoff"),)
+    (change,) = diff.changed
+    assert change.chunk == "src/http.py::backoff"
+    assert "3 ** attempt" in change.after
+
+
+def test_a_renamed_file_is_compared_across_the_rename() -> None:
+    diff = compare(
+        {"src/http.py": RETRY}, {"src/wait.py": RETRY}, {"src/http.py": "src/wait.py"}
+    )
+
+    assert diff.changed == ()
+    assert diff.vanished == ()
+    assert diff.moved == (("src/http.py::backoff", "src/wait.py::backoff"),)
+
+
+def test_a_move_with_two_possible_destinations_is_not_guessed_at() -> None:
+    diff = compare(
+        {"src/http.py": RETRY},
+        {"src/http.py": "PAUSE = 1\n", "src/wait.py": RETRY, "src/sleep.py": RETRY},
+    )
+
+    assert [chunk.chunk for chunk in diff.vanished] == ["src/http.py::backoff"]
+    assert diff.moved == ()
+
+
+def test_two_chunks_of_one_name_gone_are_not_both_followed_to_one() -> None:
+    diff = compare(
+        {"src/http.py": RETRY, "src/ftp.py": RETRY},
+        {"src/http.py": "", "src/ftp.py": "", "src/wait.py": RETRY},
+    )
+
+    assert sorted(chunk.chunk for chunk in diff.vanished) == [
+        "src/ftp.py::backoff",
+        "src/http.py::backoff",
+    ]
 
 
 def test_recognises_the_files_a_change_to_which_cannot_reach_documentation() -> None:

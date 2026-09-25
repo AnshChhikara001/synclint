@@ -1,11 +1,11 @@
 from textwrap import dedent
 
-from synclint.changes import ChunkChange, changed_chunks
+from synclint.changes import ChunkChange, compare
 from synclint.confidence import SHAPES, outside_reason, shape_of
 
 
 def change(before: str, after: str) -> ChunkChange:
-    (only,) = changed_chunks(dedent(before), dedent(after), "lib.py")
+    (only,) = compare({"lib.py": dedent(before)}, {"lib.py": dedent(after)}).changed
     return only
 
 

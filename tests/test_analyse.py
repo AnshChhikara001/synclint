@@ -93,16 +93,20 @@ def git(root: Path, *arguments: str) -> None:
     )
 
 
-def commit(root: Path, files: dict[str, str], message: str) -> None:
+def commit(root: Path, files: dict[str, str | None], message: str) -> None:
+    """Write each file, or delete it where its content is `None`, and commit."""
     for relative, content in files.items():
         path = root / relative
+        if content is None:
+            path.unlink()
+            continue
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(dedent(content).lstrip())
     git(root, "add", "-A")
     git(root, "commit", "-m", message)
 
 
-def start(root: Path, files: dict[str, str]) -> None:
+def start(root: Path, files: dict[str, str | None]) -> None:
     root.mkdir(parents=True, exist_ok=True)
     git(root, "init", "-q", "-b", "main")
     commit(root, files, "base")
@@ -712,3 +716,182 @@ def test_a_pair_linked_by_both_mechanisms_is_one_suspect(tmp_path: Path) -> None
     assert [(suspect.section.id, suspect.change.chunk) for suspect in found] == [
         ("README.md#Fetching", "src/http.py::fetch"),
     ]
+
+
+WAITING_DOCS = """
+    # Fetching
+
+    Call `fetch(url)`. It gives up after three attempts.
+
+    ## Waiting
+
+    Between attempts it sleeps for `backoff(attempt)` seconds.
+    """
+
+WAITING_SOURCE = """
+    def fetch(url, retries=3):
+        return url
+
+    def backoff(attempt):
+        return 2 ** attempt
+    """
+
+
+def test_a_section_naming_a_deleted_chunk_is_a_disappearance_nothing_is_asked_about(
+    tmp_path: Path,
+) -> None:
+    start(tmp_path, {"src/http.py": WAITING_SOURCE, "README.md": WAITING_DOCS})
+    index = build_index(tmp_path)
+    commit(tmp_path, {"src/http.py": BASE_SOURCE}, "retry without waiting")
+
+    model = ScriptedModel(accurate=True)
+    report = analyse(tmp_path, index, "main~1", "main", client(model))
+
+    (finding,) = report.findings
+    assert (finding.section, finding.chunk, finding.kind) == (
+        "README.md#Fetching > Waiting",
+        "src/http.py::backoff",
+        "disappearance",
+    )
+    assert "backoff" in finding.explanation
+    (flag,) = report.flags
+    assert (flag.finding, flag.cause, flag.attempt) == (finding, "vanished", None)
+    assert report.repairs == ()
+    assert report.verified == ()
+    assert report.spend.calls == 0
+
+
+def test_a_drift_finding_says_it_is_one(tmp_path: Path) -> None:
+    index = drifted_retries(tmp_path)
+
+    model = ScriptedModel(accurate=False, explanation="Five now.")
+    (finding,) = analyse(tmp_path, index, "main~1", "main", client(model)).findings
+
+    assert finding.kind == "drift"
+
+
+def test_a_function_moved_to_another_module_unchanged_produces_nothing(
+    tmp_path: Path,
+) -> None:
+    start(
+        tmp_path,
+        {"src/http.py": WAITING_SOURCE, "src/wait.py": "PAUSE = 1\n", "README.md": WAITING_DOCS},
+    )
+    index = build_index(tmp_path)
+    commit(
+        tmp_path,
+        {
+            "src/http.py": """
+            from src.wait import backoff
+
+            def fetch(url, retries=3):
+                return url
+            """,
+            "src/wait.py": """
+            PAUSE = 1
+
+            def backoff(attempt):
+                return 2 ** attempt
+            """,
+        },
+        "backoff moves in with the other waiting code",
+    )
+
+    model = ScriptedModel(accurate=False, explanation="Should never be asked.")
+    report = analyse(tmp_path, index, "main~1", "main", client(model))
+
+    assert report.findings == ()
+    assert report.verified == ()
+    assert model.asked == []
+
+
+def test_a_renamed_file_is_followed_and_what_changed_inside_it_is_checked(
+    tmp_path: Path,
+) -> None:
+    start(tmp_path, {"src/http.py": WAITING_SOURCE, "README.md": WAITING_DOCS})
+    index = build_index(tmp_path)
+    git(tmp_path, "mv", "src/http.py", "src/client.py")
+    commit(
+        tmp_path,
+        {
+            "src/client.py": """
+            def fetch(url, retries=5):
+                return url
+
+            def backoff(attempt):
+                return 2 ** attempt
+            """
+        },
+        "http becomes client, and retries more",
+    )
+
+    model = ScriptedModel(accurate=False, explanation="Five now.")
+    report = analyse(tmp_path, index, "main~1", "main", client(model))
+
+    assert [(f.section, f.chunk, f.kind) for f in report.findings] == [
+        ("README.md#Fetching", "src/http.py::fetch", "drift")
+    ]
+    assert "retries=5" in model.asked[0]
+
+
+def test_a_function_renamed_in_place_is_a_disappearance(tmp_path: Path) -> None:
+    start(tmp_path, {"src/http.py": WAITING_SOURCE, "README.md": WAITING_DOCS})
+    index = build_index(tmp_path)
+    commit(
+        tmp_path,
+        {"src/http.py": WAITING_SOURCE.replace("def backoff", "def delay")},
+        "backoff is called delay now",
+    )
+
+    report = analyse(tmp_path, index, "main~1", "main", client(ScriptedModel(True)))
+
+    assert [(f.section, f.chunk, f.kind) for f in report.findings] == [
+        ("README.md#Fetching > Waiting", "src/http.py::backoff", "disappearance")
+    ]
+
+
+def test_a_deleted_file_is_a_disappearance_for_every_named_chunk_in_it(
+    tmp_path: Path,
+) -> None:
+    start(tmp_path, {"src/http.py": WAITING_SOURCE, "README.md": WAITING_DOCS})
+    index = build_index(tmp_path)
+    commit(tmp_path, {"src/http.py": None}, "no more http")
+
+    report = analyse(tmp_path, index, "main~1", "main", client(ScriptedModel(True)))
+
+    assert sorted((f.section, f.chunk) for f in report.findings) == [
+        ("README.md#Fetching", "src/http.py::fetch"),
+        ("README.md#Fetching > Waiting", "src/http.py::backoff"),
+    ]
+
+
+def test_a_section_linked_to_a_deleted_chunk_only_by_embedding_is_not_reported(
+    tmp_path: Path,
+) -> None:
+    start(tmp_path, {"src/http.py": WAITING_SOURCE, "README.md": WAITING_DOCS})
+    named = build_index(tmp_path)
+    # The page never names `backoff`; an embedding thought it looked related.
+    index = replace(
+        named,
+        links=tuple(
+            replace(link, mechanism="embedding") if link.chunk.endswith("backoff") else link
+            for link in named.links
+        ),
+    )
+    commit(tmp_path, {"src/http.py": BASE_SOURCE}, "retry without waiting")
+
+    report = analyse(tmp_path, index, "main~1", "main", client(ScriptedModel(True)))
+
+    assert report.findings == ()
+
+
+def test_a_disappearance_is_reported_even_past_the_spend_ceiling(tmp_path: Path) -> None:
+    start(tmp_path, {"src/http.py": WAITING_SOURCE, "README.md": WAITING_DOCS})
+    index = build_index(tmp_path)
+    commit(tmp_path, {"src/http.py": BASE_SOURCE.replace("3", "5")}, "no waiting, more tries")
+
+    broke = ModelClient(ScriptedModel(False, "Five."), pricing=PRICING, ceiling=0.0)
+    report = analyse(tmp_path, index, "main~1", "main", broke)
+
+    assert [f.kind for f in report.findings] == ["disappearance"]
+    assert report.unchecked == 1

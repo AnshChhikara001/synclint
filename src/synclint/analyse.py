@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import difflib
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from synclint.changes import ChunkChange, touched_chunks
+from synclint.changes import ChunkChange, VanishedChunk, chunk_diff, touched_chunks
 from synclint.confidence import DEFAULT_THRESHOLD, outside_reason, rate, shape_of
 from synclint.index import Index
 from synclint.model import ModelClient, Spend, SpendCeilingExceeded
@@ -24,13 +25,19 @@ class Suspect:
     change: ChunkChange
 
 
+# A drift finding is a suspect the model judged inaccurate. A disappearance is
+# a section that names a chunk the change deleted, which no model is asked about.
+FindingKind = Literal["drift", "disappearance"]
+
+
 @dataclass(frozen=True)
 class Finding:
-    """A suspect confirmed to have drifted, with what is now wrong about it."""
+    """A section that is now wrong about a chunk, with what is wrong about it."""
 
     section: str
     chunk: str
     explanation: str
+    kind: FindingKind = "drift"
 
 
 @dataclass(frozen=True)
@@ -69,9 +76,10 @@ def section_diff(section: str, original: str, rewritten: str) -> str:
 
 # Why a finding was flagged rather than repaired. The repair's edits could not
 # be applied; validation refused the rewrite; the change is outside the gate;
-# the model's confidence inside it fell short of the threshold; or the run
-# reached its spend ceiling first.
-Cause = Literal["unappliable", "refused", "outside", "doubted", "ceiling"]
+# the model's confidence inside it fell short of the threshold; the run
+# reached its spend ceiling first; or the chunk is gone, and there is nothing
+# for a repair to describe.
+Cause = Literal["unappliable", "refused", "outside", "doubted", "ceiling", "vanished"]
 
 
 @dataclass(frozen=True)
@@ -184,7 +192,9 @@ def analyse(
     raising: the findings are already paid for, and the report says how many
     suspects it never got to.
     """
-    pending = suspects(root, index, base, head)
+    diff = chunk_diff(root, base, head)
+    gone = _disappearances(index, diff.vanished)
+    pending = _suspects(index, diff.changed)
 
     drifted: list[tuple[Suspect, Finding]] = []
     verified: list[str] = []
@@ -201,12 +211,13 @@ def analyse(
 
     repairs, flags = _resolve(model, drifted, threshold)
     return Report(
-        findings=tuple(finding for _, finding in drifted),
+        findings=tuple(flag.finding for flag in gone)
+        + tuple(finding for _, finding in drifted),
         verified=tuple(dict.fromkeys(verified)),
         unchecked=unchecked,
         unrepaired=sum(1 for flag in flags if flag.cause == "ceiling"),
         repairs=repairs,
-        flags=flags,
+        flags=gone + flags,
         spend=model.spend,
     )
 
@@ -220,6 +231,10 @@ def suspects(root: Path, index: Index, base: str, head: str) -> list[Suspect]:
     actually reach, which costs nothing, apart from whether the model then
     judges them correctly, which does.
     """
+    return _suspects(index, touched_chunks(root, base, head))
+
+
+def _suspects(index: Index, changes: Iterable[ChunkChange]) -> list[Suspect]:
     sections = {section.id: section for section in index.sections}
     # A pair both mechanisms proposed is linked twice, once under each, and is
     # still one question: the mechanism says how the pair was found, not what
@@ -227,10 +242,60 @@ def suspects(root: Path, index: Index, base: str, head: str) -> list[Suspect]:
     linked = dict.fromkeys((link.section, link.chunk) for link in index.links)
     return [
         Suspect(section=sections[section], change=change)
-        for change in touched_chunks(root, base, head)
+        for change in changes
         for section, chunk in linked
         if chunk == change.chunk and section in sections
     ]
+
+
+def disappearances(root: Path, index: Index, base: str, head: str) -> tuple[Flag, ...]:
+    """Every section that names a chunk the change from `base` to `head` deleted.
+
+    Each is a finding already resolved to a flag, and none costs a model call.
+    Separated out for the same reason as `suspects`.
+    """
+    return _disappearances(index, chunk_diff(root, base, head).vanished)
+
+
+_VANISHED = (
+    "the code it describes is gone, so there is nothing for a repair to "
+    "describe; rewriting the section or removing it is its author's call"
+)
+
+
+def _disappearances(index: Index, vanished: Iterable[VanishedChunk]) -> tuple[Flag, ...]:
+    """A flag for every section that names a vanished chunk.
+
+    A section that names a chunk no longer there is wrong whatever it says about
+    it, so no model is asked, and the finding cannot be cleared by one. Only a
+    name link counts: a section linked by embedding similarity alone never
+    named the chunk, and may describe something that survived it.
+    """
+    sections = {section.id: section for section in index.sections}
+    named = dict.fromkeys(
+        (link.section, link.chunk) for link in index.links if link.mechanism == "name"
+    )
+    return tuple(
+        Flag(
+            finding=Finding(
+                section=section,
+                chunk=chunk.chunk,
+                explanation=(
+                    f"It names `{chunk.qualname}`, which no longer exists: the "
+                    f"change removed it from `{chunk.path}`, and nothing by that "
+                    "name appeared anywhere else."
+                ),
+                kind="disappearance",
+            ),
+            reason=_VANISHED,
+            original=sections[section].text,
+            attempt=None,
+            cause="vanished",
+        )
+        for chunk in vanished
+        for section, linked in named
+        if linked == chunk.chunk and section in sections
+    )
 
 
 def _verify(model: ModelClient, suspect: Suspect) -> Finding | None:
