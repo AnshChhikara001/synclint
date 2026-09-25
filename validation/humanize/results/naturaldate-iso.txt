@@ -1,0 +1,8 @@
+Verified 1 section; 1 has drifted.
+
+README.md#humanize > Usage > Date & time humanization  (src/humanize/time.py::naturaldate)
+    `naturaldate()` now returns an ISO date string like `2007-06-05` for dates older than about five months, so the example output `Jun 05 2007` is no longer correct.
+
+    Flagged: only a renamed parameter or a changed default is repaired without a human reading the original first, and this change is neither: it touches the body
+
+3 model calls, 2390 tokens in, 267 out, $0.0030 spent.

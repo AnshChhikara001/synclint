@@ -1,0 +1,28 @@
+diff --git a/src/humanize/filesize.py b/src/humanize/filesize.py
+index 063affe..5c2e754 100644
+--- a/src/humanize/filesize.py
++++ b/src/humanize/filesize.py
+@@ -40,6 +40,7 @@ def naturalsize(
+     binary: bool = False,
+     gnu: bool = False,
+     format: str = "%.1f",
++    separator: str = " ",
+ ) -> str:
+     """Format a number of bytes like a human-readable filesize (e.g. 10 kB).
+ 
+@@ -75,6 +76,7 @@ def naturalsize(
+         gnu (bool): If `True`, the binary argument is ignored and GNU-style
+             (`ls -sh` style) prefixes are used (K, M) with the 2**10 definition.
+         format (str): Custom formatter.
++        separator (str): Placed between the number and a non-GNU suffix.
+ 
+     Returns:
+         str: Human readable representation of a filesize.
+@@ -105,6 +107,6 @@ def naturalsize(
+     # suffix is available, step up one suffix so the result reads "1.0 MB".
+     if exp < len(suffix) and abs(float(format % (abs_bytes / (base**exp)))) >= base:
+         exp += 1
+-    space = "" if gnu else " "
++    space = "" if gnu else separator
+     ret: str = format % (bytes_ / (base**exp)) + space + _(suffix[exp - 1])
+     return ret

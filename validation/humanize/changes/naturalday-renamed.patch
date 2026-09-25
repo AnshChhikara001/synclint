@@ -1,0 +1,55 @@
+diff --git a/src/humanize/__init__.py b/src/humanize/__init__.py
+index 4f54bc4..716d1a8 100644
+--- a/src/humanize/__init__.py
++++ b/src/humanize/__init__.py
+@@ -26,7 +26,7 @@ from humanize.number import (
+ )
+ from humanize.time import (
+     naturaldate,
+-    naturalday,
++    natural_day,
+     naturaldelta,
+     naturaltime,
+     precisedelta,
+@@ -47,7 +47,7 @@ __all__ = [
+     "metric",
+     "natural_list",
+     "naturaldate",
+-    "naturalday",
++    "natural_day",
+     "naturaldelta",
+     "naturalsize",
+     "naturaltime",
+diff --git a/src/humanize/time.py b/src/humanize/time.py
+index 82a8042..2755408 100644
+--- a/src/humanize/time.py
++++ b/src/humanize/time.py
+@@ -22,7 +22,7 @@ if TYPE_CHECKING:
+ 
+ __all__ = [
+     "naturaldate",
+-    "naturalday",
++    "natural_day",
+     "naturaldelta",
+     "naturaltime",
+     "precisedelta",
+@@ -325,7 +325,7 @@ def _convert_aware_datetime(
+     return value
+ 
+ 
+-def naturalday(value: dt.date | dt.datetime, format: str = "%b %d") -> str:
++def natural_day(value: dt.date | dt.datetime, format: str = "%b %d") -> str:
+     """Return a natural day.
+ 
+     For date values that are tomorrow, today or yesterday compared to
+@@ -382,8 +382,8 @@ def naturaldate(value: dt.date | dt.datetime) -> str:
+         return str(value)
+     delta = _abs_timedelta(value - today)
+     if delta.days >= 5 * 365 / 12:
+-        return naturalday(original_value, "%b %d %Y")
+-    return naturalday(original_value)
++        return natural_day(original_value, "%b %d %Y")
++    return natural_day(original_value)
+ 
+ 
+ def _quotient_and_remainder(

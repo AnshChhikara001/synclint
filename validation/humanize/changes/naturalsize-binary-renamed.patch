@@ -1,0 +1,40 @@
+diff --git a/src/humanize/filesize.py b/src/humanize/filesize.py
+index 063affe..b1c02ba 100644
+--- a/src/humanize/filesize.py
++++ b/src/humanize/filesize.py
+@@ -37,7 +37,7 @@ suffixes = {
+ 
+ def naturalsize(
+     value: float | str,
+-    binary: bool = False,
++    iec: bool = False,
+     gnu: bool = False,
+     format: str = "%.1f",
+ ) -> str:
+@@ -70,9 +70,9 @@ def naturalsize(
+ 
+     Args:
+         value (int, float, str): Integer to convert.
+-        binary (bool): If `True`, uses binary suffixes (KiB, MiB) with base
++        iec (bool): If `True`, uses binary suffixes (KiB, MiB) with base
+             2<sup>10</sup> instead of 10<sup>3</sup>.
+-        gnu (bool): If `True`, the binary argument is ignored and GNU-style
++        gnu (bool): If `True`, the iec argument is ignored and GNU-style
+             (`ls -sh` style) prefixes are used (K, M) with the 2**10 definition.
+         format (str): Custom formatter.
+ 
+@@ -81,12 +81,12 @@ def naturalsize(
+     """
+     if gnu:
+         suffix = suffixes["gnu"]
+-    elif binary:
++    elif iec:
+         suffix = suffixes["binary"]
+     else:
+         suffix = suffixes["decimal"]
+ 
+-    base = 1024 if (gnu or binary) else 1000
++    base = 1024 if (gnu or iec) else 1000
+     bytes_ = float(value)
+     abs_bytes = abs(bytes_)
+ 

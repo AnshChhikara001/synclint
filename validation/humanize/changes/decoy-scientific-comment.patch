@@ -1,0 +1,13 @@
+diff --git a/src/humanize/number.py b/src/humanize/number.py
+index 52a5356..fa27f3b 100644
+--- a/src/humanize/number.py
++++ b/src/humanize/number.py
+@@ -452,7 +452,7 @@ def scientific(value: NumberOrString, precision: int = 2) -> str:
+     fmt = f"{{:.{int(precision)}e}}"
+     n = fmt.format(value)
+     part1, part2 = n.split("e")
+-    # Normalise exponent: int() strips the "+" sign and leading zeros,
++    # Normalise the exponent. int() strips the "+" sign and any leading zeros,
+     # while preserving "-" and a single "0" for 10⁰.
+     return part1 + " x 10" + str(int(part2)).translate(_SUPERSCRIPT_TRANS)
+ 

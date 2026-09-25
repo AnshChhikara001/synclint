@@ -1,0 +1,17 @@
+diff --git a/src/humanize/number.py b/src/humanize/number.py
+index 52a5356..80c3f5a 100644
+--- a/src/humanize/number.py
++++ b/src/humanize/number.py
+@@ -194,10 +194,8 @@ def intcomma(value: NumberOrString, ndigits: int | None = None) -> str:
+     except (TypeError, ValueError):
+         return str(value)
+ 
+-    if ndigits is not None:
+-        result = f"{value:,.{ndigits}f}"
+-    else:
+-        result = f"{value:,}"
++    spec = "," if ndigits is None else f",.{ndigits}f"
++    result = format(value, spec)
+     if thousands_sep != "," or decimal_sep != ".":
+         result = result.translate(str.maketrans(",.", thousands_sep + decimal_sep))
+     return result

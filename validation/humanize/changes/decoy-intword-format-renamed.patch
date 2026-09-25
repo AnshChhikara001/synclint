@@ -1,0 +1,40 @@
+diff --git a/src/humanize/number.py b/src/humanize/number.py
+index 52a5356..e975d6b 100644
+--- a/src/humanize/number.py
++++ b/src/humanize/number.py
+@@ -220,7 +220,7 @@ human_powers = (
+ )
+ 
+ 
+-def intword(value: NumberOrString, format: str = "%.1f") -> str:
++def intword(value: NumberOrString, fmt: str = "%.1f") -> str:
+     """Converts a large integer to a friendly text representation.
+ 
+     Works best for numbers over 1 million. For example, 1_000_000 becomes "1.0 million",
+@@ -248,7 +248,7 @@ def intword(value: NumberOrString, format: str = "%.1f") -> str:
+ 
+     Args:
+         value (int, float, str): Integer to convert.
+-        format (str): To change the number of decimal or general format of the number
++        fmt (str): To change the number of decimal or general format of the number
+             portion.
+ 
+     Returns:
+@@ -280,7 +280,7 @@ def intword(value: NumberOrString, format: str = "%.1f") -> str:
+     ordinal -= 1
+     power = powers[ordinal]
+     chopped = value / power
+-    rounded_value = float(format % chopped)
++    rounded_value = float(fmt % chopped)
+ 
+     if not largest_ordinal and rounded_value == powers[ordinal + 1] // power:
+         # After rounding, we end up just at the next power. Compare against the
+@@ -294,7 +294,7 @@ def intword(value: NumberOrString, format: str = "%.1f") -> str:
+     singular, plural = human_powers[ordinal]
+     unit = _ngettext(singular, plural, math.ceil(rounded_value))
+     decimal_sep = decimal_separator()
+-    number = (format % rounded_value).replace(".", decimal_sep)
++    number = (fmt % rounded_value).replace(".", decimal_sep)
+     return f"{negative_prefix}{number} {unit}"
+ 
+ 

@@ -1,0 +1,19 @@
+Verified 1 section; 1 has drifted.
+
+README.md#humanize > Usage > File size humanization  (src/humanize/filesize.py::naturalsize)
+    `naturalsize` no longer accepts `binary=True`; the binary formatting option was renamed to `iec=True`.
+
+    --- README.md#humanize > Usage > File size humanization
+    +++ README.md#humanize > Usage > File size humanization
+    @@ -2,7 +2,7 @@
+     >>> import humanize
+     >>> humanize.naturalsize(1_000_000)
+     '1.0 MB'
+    ->>> humanize.naturalsize(1_000_000, binary=True)
+    +>>> humanize.naturalsize(1_000_000, iec=True)
+     '976.6 KiB'
+     >>> humanize.naturalsize(1_000_000, gnu=True)
+     '976.6K'
+    Proposed: a renamed-parameter, 96% confident.
+
+4 model calls, 3493 tokens in, 290 out, $0.0039 spent.

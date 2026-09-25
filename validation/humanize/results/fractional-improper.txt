@@ -1,0 +1,8 @@
+Verified 1 section; 1 has drifted.
+
+README.md#humanize > Usage > Human-readable floating point numbers  (src/humanize/number.py::fractional)
+    `fractional(1.5)` no longer returns a mixed number like `1 1/2`; for values with a whole-number part the function now returns an improper fraction such as `3/2`.
+
+    Flagged: only a renamed parameter or a changed default is repaired without a human reading the original first, and this change is neither: it touches the body
+
+3 model calls, 2228 tokens in, 314 out, $0.0031 spent.

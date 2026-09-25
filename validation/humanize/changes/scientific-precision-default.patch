@@ -1,0 +1,13 @@
+diff --git a/src/humanize/number.py b/src/humanize/number.py
+index 52a5356..009039d 100644
+--- a/src/humanize/number.py
++++ b/src/humanize/number.py
+@@ -410,7 +410,7 @@ def fractional(value: NumberOrString) -> str:
+     return f"{whole_number:.0f} {abs(numerator):.0f}/{denominator:.0f}"
+ 
+ 
+-def scientific(value: NumberOrString, precision: int = 2) -> str:
++def scientific(value: NumberOrString, precision: int = 3) -> str:
+     """Return number in string scientific notation z.wq x 10ⁿ.
+ 
+     Examples:

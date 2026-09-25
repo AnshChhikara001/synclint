@@ -1,0 +1,13 @@
+diff --git a/src/humanize/time.py b/src/humanize/time.py
+index 82a8042..95c1214 100644
+--- a/src/humanize/time.py
++++ b/src/humanize/time.py
+@@ -480,7 +480,7 @@ def precisedelta(
+     value: dt.timedelta | float | None,
+     minimum_unit: str = "seconds",
+     suppress: Iterable[str] = (),
+-    format: str = "%0.2f",
++    format: str = "%0.1f",
+ ) -> str:
+     """Return a precise representation of a timedelta or number of seconds.
+ 

@@ -1,0 +1,28 @@
+Verified 1 section; 1 has drifted.
+
+README.md#humanize > Usage > Scientific notation  (src/humanize/number.py::scientific)
+    `humanize.scientific()` now defaults to `precision=3`, so the examples without an explicit precision would no longer return two decimal places.
+
+    --- README.md#humanize > Usage > Scientific notation
+    +++ README.md#humanize > Usage > Scientific notation
+    @@ -1,13 +1,13 @@
+     ```pycon
+     >>> import humanize
+     >>> humanize.scientific(0.3)
+    -'3.00 x 10⁻¹'
+    +'3.000 x 10⁻¹'
+     >>> humanize.scientific(500)
+    -'5.00 x 10²'
+    +'5.000 x 10²'
+     >>> humanize.scientific("20000")
+    -'2.00 x 10⁴'
+    +'2.000 x 10⁴'
+     >>> humanize.scientific(1**10)
+    -'1.00 x 10⁰'
+    +'1.000 x 10⁰'
+     >>> humanize.scientific(1**10, precision=1)
+     '1.0 x 10⁰'
+     >>> humanize.scientific(1**10, precision=0)
+    Proposed: a changed-default, 99% confident.
+
+4 model calls, 2855 tokens in, 527 out, $0.0045 spent.

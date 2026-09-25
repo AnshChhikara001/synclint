@@ -1,0 +1,72 @@
+diff --git a/src/humanize/__init__.py b/src/humanize/__init__.py
+index 4f54bc4..97bf97e 100644
+--- a/src/humanize/__init__.py
++++ b/src/humanize/__init__.py
+@@ -15,7 +15,6 @@ from humanize.filesize import naturalsize
+ from humanize.i18n import activate, deactivate, decimal_separator, thousands_separator
+ from humanize.lists import natural_list
+ from humanize.number import (
+-    apnumber,
+     clamp,
+     fractional,
+     intcomma,
+@@ -37,7 +36,6 @@ from ._version import __version__
+ __all__ = [
+     "__version__",
+     "activate",
+-    "apnumber",
+     "clamp",
+     "deactivate",
+     "decimal_separator",
+diff --git a/src/humanize/number.py b/src/humanize/number.py
+index 52a5356..d21079d 100644
+--- a/src/humanize/number.py
++++ b/src/humanize/number.py
+@@ -298,47 +298,6 @@ def intword(value: NumberOrString, format: str = "%.1f") -> str:
+     return f"{negative_prefix}{number} {unit}"
+ 
+ 
+-def apnumber(value: NumberOrString) -> str:
+-    """Converts an integer to Associated Press style.
+-
+-    Examples:
+-      ```pycon
+-      >>> apnumber(0)
+-      'zero'
+-      >>> apnumber(5)
+-      'five'
+-      >>> apnumber(10)
+-      '10'
+-      >>> apnumber("7")
+-      'seven'
+-      >>> apnumber("foo")
+-      'foo'
+-      >>> apnumber(None)
+-      'None'
+-
+-      ```
+-
+-    Args:
+-        value (int, float, str): Integer to convert.
+-
+-    Returns:
+-        str: For numbers 0-9, the number spelled out. Otherwise, the number. This always
+-            returns a string unless the value was not `int`-able, then `str(value)`
+-            is returned.
+-    """
+-    import math
+-
+-    try:
+-        if not math.isfinite(float(value)):
+-            return _format_not_finite(float(value))
+-        value = int(value)
+-    except (TypeError, ValueError):
+-        return str(value)
+-    if not 0 <= value < 10:
+-        return str(value)
+-    return _(_APNUMBER_WORDS[value])
+-
+-
+ def fractional(value: NumberOrString) -> str:
+     """Convert to fractional number.
+ 

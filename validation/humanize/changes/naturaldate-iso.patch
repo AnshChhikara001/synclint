@@ -1,0 +1,13 @@
+diff --git a/src/humanize/time.py b/src/humanize/time.py
+index 82a8042..8e0beef 100644
+--- a/src/humanize/time.py
++++ b/src/humanize/time.py
+@@ -382,7 +382,7 @@ def naturaldate(value: dt.date | dt.datetime) -> str:
+         return str(value)
+     delta = _abs_timedelta(value - today)
+     if delta.days >= 5 * 365 / 12:
+-        return naturalday(original_value, "%b %d %Y")
++        return value.isoformat()
+     return naturalday(original_value)
+ 
+ 

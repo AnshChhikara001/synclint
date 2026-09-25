@@ -1,0 +1,19 @@
+Verified 1 section; 1 has drifted.
+
+README.md#humanize > Usage > Precise time delta  (src/humanize/time.py::precisedelta)
+    The default `precisedelta()` format changed from `%0.2f` to `%0.1f`, so the first example would now render `33.1 seconds` instead of `33.12 seconds`.
+
+    --- README.md#humanize > Usage > Precise time delta
+    +++ README.md#humanize > Usage > Precise time delta
+    @@ -3,7 +3,7 @@
+     >>> import datetime as dt
+     >>> delta = dt.timedelta(seconds=3633, days=2, microseconds=123000)
+     >>> humanize.precisedelta(delta)
+    -'2 days, 1 hour and 33.12 seconds'
+    +'2 days, 1 hour and 33.1 seconds'
+     >>> humanize.precisedelta(delta, minimum_unit="microseconds")
+     '2 days, 1 hour, 33 seconds and 123 milliseconds'
+     >>> humanize.precisedelta(delta, suppress=["days"], format="%0.4f")
+    Proposed: a changed-default, 98% confident.
+
+4 model calls, 9315 tokens in, 894 out, $0.0110 spent.
