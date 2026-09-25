@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import tempfile
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from synclint.chunks import Chunk, extract_chunks
 from synclint.embeddings import EmbeddingClient
+from synclint.git import extract, run
 from synclint.links import Link, propose_embedding_links, propose_name_links
 from synclint.sections import Section, split_sections
 
@@ -21,14 +24,26 @@ DEFAULT_DOCUMENTATION_GLOBS = ("README.md", "docs/**/*.md")
 # corpus, and `score --threshold` is how a different value gets argued for.
 DEFAULT_SIMILARITY_THRESHOLD = 0.55
 
+# Where a repository commits its index, relative to its root. A dotted
+# directory, like `.github`, because it is tooling state and not the project.
+DEFAULT_INDEX_PATH = Path(".synclint/index.json")
+
 
 @dataclass(frozen=True)
 class Index:
-    """What synclint believes about a repository."""
+    """What synclint believes about a repository.
+
+    `revision` is the commit the index describes, `None` when nothing says
+    which, and `documentation_globs` what it counted as documentation. Both
+    exist so that an index committed to a repository can be checked against
+    the revision a run needs before it is trusted.
+    """
 
     chunks: tuple[Chunk, ...]
     sections: tuple[Section, ...]
     links: tuple[Link, ...]
+    revision: str | None = None
+    documentation_globs: tuple[str, ...] | None = None
 
     def to_json(self) -> str:
         """Render the index as the JSON that gets committed to the repository.
@@ -38,6 +53,10 @@ class Index:
         at, and ignored when reading.
         """
         document = {
+            "revision": self.revision,
+            "documentation_globs": (
+                None if self.documentation_globs is None else list(self.documentation_globs)
+            ),
             "chunks": [chunk.to_dict() for chunk in self.chunks],
             "sections": [section.to_dict() for section in self.sections],
             "links": [link.to_dict() for link in self.links],
@@ -48,10 +67,15 @@ class Index:
     def from_json(cls, document: str) -> Index:
         """Read back an index rendered by `to_json`."""
         data = json.loads(document)
+        # Read with `get`: an index written before #11 records neither, and
+        # reads back as one that cannot be checked rather than as an error.
+        globs = data.get("documentation_globs")
         return cls(
             chunks=tuple(Chunk.from_dict(chunk) for chunk in data["chunks"]),
             sections=tuple(Section.from_dict(section) for section in data["sections"]),
             links=tuple(Link.from_dict(link) for link in data["links"]),
+            revision=data.get("revision"),
+            documentation_globs=None if globs is None else tuple(globs),
         )
 
 
@@ -89,7 +113,141 @@ def build_index(
     links = propose_name_links(sections, chunks)
     if embeddings is not None:
         links += propose_embedding_links(sections, chunks, embeddings, threshold)
-    return Index(chunks=tuple(chunks), sections=tuple(sections), links=tuple(links))
+    return Index(
+        chunks=tuple(chunks),
+        sections=tuple(sections),
+        links=tuple(links),
+        documentation_globs=tuple(documentation_globs),
+    )
+
+
+def build_index_at(root: Path, revision: str, documentation_globs: Sequence[str]) -> Index:
+    """Index the repository at `root` as it stood at `revision`, not as its working tree is.
+
+    Name links only: this is the index a run builds for itself, and a run that
+    has to build one should not also have to pay for embeddings to do it.
+    """
+    commit = run(root, "rev-parse", "--verify", f"{revision}^{{commit}}").strip()
+    with tempfile.TemporaryDirectory() as directory:
+        extract(root, commit, Path(directory))
+        index = build_index(Path(directory), documentation_globs)
+    return replace(index, revision=commit)
+
+
+@dataclass(frozen=True)
+class IndexUsed:
+    """Which index a run analysed against, and why that one.
+
+    `path` is the committed index when it was the one used. It is `None` when
+    the run built its own at `revision`, and `passed_over` then says what was
+    wrong with the committed one.
+    """
+
+    revision: str
+    path: str | None
+    passed_over: str | None = None
+
+    def describe(self) -> str:
+        """One sentence for the report, naming the index and the commit it describes."""
+        if self.path is not None:
+            return f"Index: {self.path}, committed, built at {self.revision[:7]}."
+        return (
+            f"Index: built for this run at the base, {self.revision[:7]}, "
+            f"because {self.passed_over}."
+        )
+
+
+def index_for(
+    root: Path, base: str, path: Path, documentation_globs: Sequence[str]
+) -> tuple[Index, IndexUsed]:
+    """The index to analyse a change from `base` against, and which one it was.
+
+    The committed index at `path`, relative to `root`, is used if it still
+    describes `base`: it records the commit it was built at, it was built
+    from the same documentation globs, and no Python or documentation file
+    differs between that commit and `base`. Compared by content rather than
+    by commit, because the commit that commits a rebuilt index is never the
+    one it was built at.
+
+    Otherwise an index is built in memory at `base`, so that a stale or
+    missing index makes a run slower rather than wrong.
+    """
+    commit = run(root, "rev-parse", "--verify", f"{base}^{{commit}}").strip()
+    committed = root / path
+    index = (
+        Index.from_json(committed.read_text(encoding="utf-8"))
+        if committed.is_file()
+        else None
+    )
+    stale = _stale(root, index, commit, documentation_globs, path)
+    if index is not None and index.revision is not None and stale is None:
+        return index, IndexUsed(index.revision, str(path))
+    return (
+        build_index_at(root, commit, documentation_globs),
+        IndexUsed(commit, None, stale),
+    )
+
+
+def _stale(
+    root: Path,
+    index: Index | None,
+    base: str,
+    documentation_globs: Sequence[str],
+    path: Path,
+) -> str | None:
+    """Why `index` does not describe `base`, or `None` when it does."""
+    if index is None:
+        return f"there is no index at {path}"
+    if index.revision is None:
+        return f"{path} does not record the commit it was built at"
+    if index.documentation_globs != tuple(documentation_globs):
+        built_from = ", ".join(index.documentation_globs or ("nothing recorded",))
+        return (
+            f"{path} was built from documentation {built_from}, "
+            f"not {', '.join(documentation_globs)}"
+        )
+    built_at = index.revision[:7]
+    try:
+        run(root, "cat-file", "-e", f"{index.revision}^{{commit}}")
+    except subprocess.CalledProcessError:
+        return f"{path} was built at {built_at}, which this clone does not have"
+    changed = [
+        name
+        for name in run(
+            root, "diff", "-z", "--name-only", index.revision, base, "--",
+            *_pathspecs(documentation_globs),
+        ).split("\0")
+        if name
+    ]
+    if changed:
+        files = "1 file it covers" if len(changed) == 1 else f"{len(changed)} files it covers"
+        return f"{path} was built at {built_at}, and {files} changed between then and the base"
+    return None
+
+
+def working_revision(root: Path, documentation_globs: Sequence[str]) -> str | None:
+    """The commit an index of `root`'s working tree describes, or `None` if none does.
+
+    That is the checked-out commit, as long as no file the index reads has
+    uncommitted changes. An index built from edits nobody has committed
+    describes no revision, and recording one would let it pass as fresh.
+    """
+    try:
+        head = run(root, "rev-parse", "--verify", "HEAD").strip()
+    except subprocess.CalledProcessError:
+        # Not a repository, or one with nothing committed yet.
+        return None
+    if run(root, "status", "--porcelain", "--", *_pathspecs(documentation_globs)).strip():
+        return None
+    return head
+
+
+def _pathspecs(documentation_globs: Sequence[str]) -> list[str]:
+    # git's glob magic reads `**` as `Path.glob` does, so the files git
+    # compares are the files `build_index` reads. Python is every `.py` file,
+    # a superset of what `_source` keeps: a change to one it skips costs a
+    # rebuild, never a stale answer.
+    return [":(glob)**/*.py", *(f":(glob){glob}" for glob in documentation_globs)]
 
 
 def _source(root: Path) -> list[Path]:

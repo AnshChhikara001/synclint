@@ -325,6 +325,8 @@ def test_serialises_chunks_sections_and_links_to_json(tmp_path: Path) -> None:
     document = json.loads(build_index(tmp_path).to_json())
 
     assert document == {
+        "revision": None,
+        "documentation_globs": ["README.md", "docs/**/*.md"],
         "chunks": [
             {
                 "id": "src/auth.py::authenticate",

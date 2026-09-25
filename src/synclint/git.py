@@ -1,8 +1,10 @@
-"""Running git, and the two questions `analyse` runs it to answer."""
+"""Running git, and what synclint asks of it: what changed, and what a revision held."""
 
 from __future__ import annotations
 
+import io
 import subprocess
+import tarfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,6 +62,25 @@ def changed_python_files(root: Path, base: str, head: str) -> list[FileChange]:
 def file_at(root: Path, revision: str, path: str) -> str:
     """Read one file as it stood at a revision."""
     return run(root, "show", f"{revision}:{path}")
+
+
+def extract(root: Path, revision: str, into: Path) -> None:
+    """Write the files of `root` as they stood at `revision` into `into`.
+
+    Through `git archive`, so the repository's working tree and its staging
+    area are never touched. Run in a subdirectory, git archives only that
+    subdirectory, which is what keeps paths relative to `root`. Only regular
+    files are written: a link either points at something the tree already
+    holds or at something outside it, which is not the repository's to report on.
+    """
+    archive = subprocess.run(
+        ["git", "-C", str(root), "archive", "--format=tar", revision],
+        check=True,
+        capture_output=True,
+    ).stdout
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+        files = [member for member in tar.getmembers() if member.isfile()]
+        tar.extractall(into, members=files, filter="data")
 
 
 def run(root: Path, *arguments: str, env: Mapping[str, str] | None = None) -> str:
