@@ -35,18 +35,25 @@ def changed_python_files(root: Path, base: str, head: str) -> list[FileChange]:
     position = 0
     while position < len(fields) - 1:
         status = fields[position]
-        if status.startswith("R"):
-            files.append(FileChange(fields[position + 1], fields[position + 2]))
+        # A rename or a copy names two paths, every other status one. Copies
+        # are not asked for, and one would leave its source where it was.
+        if status[0] in "RC":
+            before = fields[position + 1] if status[0] == "R" else None
+            files.append(FileChange(before, fields[position + 2]))
             position += 3
             continue
         path = fields[position + 1]
+        position += 2
+        if status == "T":
+            # A module become a symlink, or back: git shows the link's target
+            # as the file's text, which would read as every chunk deleted.
+            continue
         files.append(
             FileChange(
                 before=None if status == "A" else path,
                 after=None if status == "D" else path,
             )
         )
-        position += 2
     return files
 
 

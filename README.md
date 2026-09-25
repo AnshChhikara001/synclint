@@ -286,7 +286,7 @@ The first run found five: both misses were the same gap, and neither was the
 model's fault. A deleted function had no chunk on the head side, so nothing was
 compared and nothing asked. The rename was worse: `naturalday` vanishing was
 equally invisible, but `naturaldate`, which calls it, changed two lines — so
-the section that calls `humanize.naturalday` three times was checked, against
+the section that calls `humanize.naturalday` three times was verified, against
 `naturaldate`, and rightly judged still accurate *about `naturaldate`*. The
 report said one section was verified and none drifted, true and misleading.
 #10 closed it: both sections are now disappearances, found on replay without
@@ -303,7 +303,7 @@ It ran from the command line, not as an installed Action: that needs a fork
 of humanize carrying these eleven pull requests, and the Action's own path
 from event to `analyse` is already exercised by the live run above.
 
-202 tests, mypy strict, no API spend in the suite — every test replays a recorded
+204 tests, mypy strict, no API spend in the suite — every test replays a recorded
 answer or injects a fake.
 
 ## Limitations
@@ -326,7 +326,12 @@ answer or injects a fake.
   corpus's one example; whether they reach it in general is unmeasured.
 - **A chunk the change adds is invisible.** Only chunks that existed before
   the change are compared, so new code nothing documents yet raises nothing,
-  and a page claiming to list everything is not caught growing stale.
+  and a page claiming to list everything is not caught falling out of date.
+- **The Action does not report disappearances yet.** Without `--index` the
+  index is built from the working tree, which the Action checks out at the
+  head, where a deleted chunk has nothing to link to. The corpus and humanize
+  runs index the base, and find them there. Building the index at the base is
+  #11's; until then, a chunk moved and changed is missed the same way.
 - **A disappearance is only as good as the name link behind it.** It is never
   put to a model, so a deleted method called `write` would flag every section
   that uses the word. A move is followed only when it is unambiguous and keeps

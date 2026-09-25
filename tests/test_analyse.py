@@ -909,3 +909,19 @@ def test_the_command_line_sets_a_disappearance_apart_from_drift(tmp_path: Path) 
         "Verified 0 sections; 0 have drifted. 1 names code the change deleted.\n"
     )
     assert "README.md#Fetching > Waiting  (src/http.py::backoff, deleted)" in printed
+
+
+def test_a_module_replaced_by_a_symlink_is_not_read_as_deleted_code(tmp_path: Path) -> None:
+    start(
+        tmp_path,
+        {"src/http.py": WAITING_SOURCE, "src/client.py": WAITING_SOURCE, "README.md": WAITING_DOCS},
+    )
+    index = build_index(tmp_path)
+    (tmp_path / "src/http.py").unlink()
+    (tmp_path / "src/http.py").symlink_to("client.py")
+    git(tmp_path, "add", "-A")
+    git(tmp_path, "commit", "-m", "http is an alias of client now")
+
+    report = analyse(tmp_path, index, "main~1", "main", client(ScriptedModel(True)))
+
+    assert report.findings == ()

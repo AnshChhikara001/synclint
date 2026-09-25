@@ -104,6 +104,8 @@ def compare(
     name appeared and no other chunk of that name went missing. Anything less
     certain than that is reported vanished: a false disappearance is a flag a
     human dismisses, and a false move would compare a chunk with a stranger.
+    The exception is a change that added a file that does not parse, which
+    could be where it went; then nothing is reported vanished at all.
     A move into or out of a class, or a rename, changes the qualified name, so
     neither is followed.
     """
@@ -125,12 +127,14 @@ def compare(
         was.update(((path, qualname), text) for qualname, text in old.items())
         now.update(((destination, qualname), text) for qualname, text in new.items())
     paired = set(partner.values())
+    unreadable = False
     for path, source in after.items():
         if path in paired:
             continue
         try:
             new = _definitions(source)
         except SyntaxError:
+            unreadable = True
             continue
         now.update(((path, qualname), text) for qualname, text in new.items())
 
@@ -150,7 +154,10 @@ def compare(
         if target not in now:
             candidates = appeared_by_name.get(qualname, [])
             if missing_names[qualname] != 1 or len(candidates) != 1:
-                vanished.append(VanishedChunk(path, qualname, source))
+                # A file the change added that does not parse may be where it
+                # went, and a disappearance is reported only when it is certain.
+                if not unreadable:
+                    vanished.append(VanishedChunk(path, qualname, source))
                 continue
             target = candidates[0]
         if target[0] != path:

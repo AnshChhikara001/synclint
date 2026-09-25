@@ -119,7 +119,7 @@ def summary(
     section with any finding a human has to look at is flagged, even if another
     finding against it was repaired.
     """
-    # A section naming deleted code was never checked, and has its own list:
+    # A section naming deleted code was never verified, and has its own list:
     # nothing about it is a judgement, and nothing a model says could clear it.
     vanished = [flag for flag in report.flags if flag.cause == "vanished"]
     flags = [flag for flag in report.flags if flag.cause != "vanished"]
@@ -236,7 +236,7 @@ def publish(
             f"{root} does not hold {pull.head}, the head of #{number}; it needs a "
             "clone with full history"
         ) from None
-    # Every section the comment names, checked or not, so that each is linked.
+    # Every section the comment names, verified or not, so that each is linked.
     sections = dict.fromkeys(
         report.verified + tuple(finding.section for finding in report.findings)
     )

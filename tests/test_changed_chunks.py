@@ -220,3 +220,10 @@ def test_recognises_the_files_a_change_to_which_cannot_reach_documentation() -> 
     assert not is_test_file("src/http.py")
     assert not is_test_file("src/testing.py")
     assert not is_test_file("src/latest/api.py")
+
+
+def test_a_chunk_gone_while_a_file_the_change_added_will_not_parse_is_not_called_vanished() -> None:
+    # It may well have moved there; nothing can say it did not.
+    diff = compare({"src/http.py": RETRY}, {"src/http.py": "", "src/wait.py": "def backoff(:"})
+
+    assert diff.vanished == ()
