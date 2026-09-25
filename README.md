@@ -70,9 +70,11 @@ access to GitHub, so every judgement the tool makes is reachable offline.
   compressed, installed from the lockfile, and built fresh on each run (about
   12 seconds cold on a laptop).
 
-Not yet: a run against a live pull request. The container has been run
-end to end locally, through `analyse` to GitHub refusing a fake token; a real
-comment on a real pull request is still to come.
+First live run, on a test repository whose pull request changed a default
+from 3 to 5: the check took 67 seconds including the image build, and left one
+comment — one section checked, one repaired at 99% confidence, four model
+calls, $0.0018 — and a pull request of repairs that changed `3 attempts` to
+`5 attempts` and nothing else.
 
 ## Using it
 
@@ -285,6 +287,9 @@ answer or injects a fake.
   around the Action would then be one careless step from running a stranger's
   code with the repository's key (ADR-0006). Under it, repairs degrade to
   diffs in the comment, as they do for a token GitHub answers 403.
+- **The repair pull request triggers the workflow too.** GitHub holds that
+  run for approval, since the Actions bot opened it; approved, it would find no
+  code changed and add a comment saying so.
 - **The image is built on every run**, not pulled from a registry: 95MB
   compressed and 436MB unpacked, of which git's layer is 92MB and numpy 68MB.
 - **The repair branch is rebuilt on every push.** Repairs are recomputed
