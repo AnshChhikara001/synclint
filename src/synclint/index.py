@@ -162,46 +162,77 @@ def index_for(
 ) -> tuple[Index, IndexUsed]:
     """The index to analyse a change from `base` against, and which one it was.
 
-    The committed index at `path` is used if it still
-    describes `base`: it records the commit it was built at, it was built
-    from the same documentation globs, and no Python or documentation file
-    differs between that commit and `base`. Compared by content rather than
-    by commit, because the commit that commits a rebuilt index is never the
-    one it was built at.
+    The index committed at `path` is read as it stood at `base`, never from
+    the working tree: the Action checks out the pull request's head, and an
+    index the pull request wrote could claim the base and link nothing. A
+    `path` outside `root` is read from disk, since git has no version of it.
 
-    Otherwise an index is built in memory at `base`, so that a stale or
-    missing index makes a run slower rather than wrong.
+    It is used if it still describes `base`: it records the commit it was
+    built at, it was built from the same documentation globs, and no Python
+    or documentation file differs between that commit and `base`. Compared by
+    content rather than by commit, because the commit that commits a rebuilt
+    index is never the one it was built at.
+
+    Otherwise an index is built in memory at `base`, so that an out-of-date
+    or missing index makes a run slower rather than wrong.
     """
     commit = run(root, "rev-parse", "--verify", f"{base}^{{commit}}").strip()
-    index = Index.from_json(path.read_text(encoding="utf-8")) if path.is_file() else None
     # Named as the repository sees it where it can be: the report is read on
     # a pull request, where the runner's checkout directory means nothing.
     shown = path.relative_to(root) if path.is_relative_to(root) else path
-    stale = _stale(root, index, commit, documentation_globs, shown)
-    if index is not None and index.revision is not None and stale is None:
+    index = _committed(root, commit, path, shown)
+    reason = (
+        index
+        if isinstance(index, str)
+        else _out_of_date(root, index, commit, documentation_globs, shown)
+    )
+    # The first two are implied by the third, and spelled out for mypy.
+    if isinstance(index, Index) and index.revision is not None and reason is None:
         return index, IndexUsed(index.revision, str(shown))
     return (
         build_index_at(root, commit, documentation_globs),
-        IndexUsed(commit, None, stale),
+        IndexUsed(commit, None, reason),
     )
 
 
-def _stale(
+def _committed(root: Path, base: str, path: Path, shown: Path) -> Index | str:
+    """The index at `path` as of `base`, or why there is none to use."""
+    if path.is_relative_to(root):
+        try:
+            # `./` makes the path relative to `root` rather than to the top
+            # of the repository, which `root` need not be.
+            document = run(root, "show", f"{base}:./{shown.as_posix()}")
+        except subprocess.CalledProcessError:
+            return f"there is no index at {shown} at the base"
+    elif path.is_file():
+        document = path.read_text(encoding="utf-8")
+    else:
+        return f"there is no index at {shown}"
+    try:
+        return Index.from_json(document)
+    except (ValueError, KeyError, TypeError):
+        # A merge conflict left in it, or a shape this version never wrote.
+        # Either way an index can be built instead, so this is no reason to fail.
+        return f"{shown} cannot be read as an index"
+
+
+def _out_of_date(
     root: Path,
-    index: Index | None,
+    index: Index,
     base: str,
     documentation_globs: Sequence[str],
     path: Path,
 ) -> str | None:
     """Why `index` does not describe `base`, or `None` when it does."""
-    if index is None:
-        return f"there is no index at {path}"
     if index.revision is None:
         return f"{path} does not record the commit it was built at"
-    if index.documentation_globs != tuple(documentation_globs):
-        built_from = ", ".join(index.documentation_globs or ("nothing recorded",))
+    if index.documentation_globs is None:
+        return f"{path} does not record the documentation it was built from"
+    # As sets: `build_index` sorts what the globs match, so their order changes
+    # nothing in the index.
+    if set(index.documentation_globs) != set(documentation_globs):
         return (
-            f"{path} was built from documentation {built_from}, "
+            f"{path} was built from documentation {', '.join(index.documentation_globs)}, "
             f"not {', '.join(documentation_globs)}"
         )
     built_at = index.revision[:7]
@@ -227,7 +258,7 @@ def working_revision(root: Path, documentation_globs: Sequence[str]) -> str | No
     """The commit an index of `root`'s working tree describes, or `None` if none does.
 
     That is the checked-out commit, as long as no file the index reads has
-    uncommitted changes. An index built from edits nobody has committed
+    uncommitted changes or is ignored. An index built from edits nobody has committed
     describes no revision, and recording one would let it pass as fresh.
     """
     try:
@@ -235,7 +266,14 @@ def working_revision(root: Path, documentation_globs: Sequence[str]) -> str | No
     except subprocess.CalledProcessError:
         # Not a repository, or one with nothing committed yet.
         return None
-    if run(root, "status", "--porcelain", "--", *_pathspecs(documentation_globs)).strip():
+    # Ignored files too: `build_index` walks the directory rather than asking
+    # git, so it reads an ignored page that a clone at `head` does not have.
+    # Except where `_source` never looks, or a virtualenv would count.
+    status = run(
+        root, "status", "--porcelain", "-z", "--ignored", "--",
+        *_pathspecs(documentation_globs),
+    )
+    if any(not _skipped(Path(entry[3:])) for entry in status.split("\0") if entry):
         return None
     return head
 
@@ -244,22 +282,21 @@ def _pathspecs(documentation_globs: Sequence[str]) -> list[str]:
     # git's glob magic reads `**` as `Path.glob` does, so the files git
     # compares are the files `build_index` reads. Python is every `.py` file,
     # a superset of what `_source` keeps: a change to one it skips costs a
-    # rebuild, never a stale answer.
+    # rebuild, never a wrong answer.
     return [":(glob)**/*.py", *(f":(glob){glob}" for glob in documentation_globs)]
 
 
 def _source(root: Path) -> list[Path]:
-    # TODO: replace with `git ls-files` once `analyse` has made git a hard
-    # dependency. That would also exclude a non-hidden virtualenv and anything
-    # else the repository has chosen to ignore.
+    # TODO: replace with `git ls-files`, now that git is a hard dependency.
+    # That would also exclude a non-hidden virtualenv and anything else the
+    # repository has chosen to ignore.
     return sorted(
-        path
-        for path in root.rglob("*.py")
-        if not any(
-            part.startswith(".") or part == "__pycache__"
-            for part in path.relative_to(root).parts
-        )
+        path for path in root.rglob("*.py") if not _skipped(path.relative_to(root))
     )
+
+
+def _skipped(relative: Path) -> bool:
+    return any(part.startswith(".") or part == "__pycache__" for part in relative.parts)
 
 
 def _documentation(root: Path, documentation_globs: Sequence[str]) -> list[Path]:

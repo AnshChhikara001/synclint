@@ -188,6 +188,54 @@ def test_an_index_built_at_a_commit_this_clone_lacks_is_rebuilt(tmp_path: Path) 
     assert used.passed_over is not None and "does not have" in used.passed_over
 
 
+def test_an_index_the_head_brings_is_not_the_one_committed_at_the_base(
+    tmp_path: Path,
+) -> None:
+    # The Action checks out the pull request's head, so an index read from the
+    # working tree would be one the pull request wrote: it could claim the base
+    # and name nothing, and every finding would go unreported.
+    start(tmp_path, {"README.md": DOCS, "src/fetch.py": SOURCE})
+    base = rev_parse(tmp_path, "HEAD")
+    forged = replace(build_index(tmp_path), links=(), revision=base)
+    commit(tmp_path, {str(COMMITTED): forged.to_json()}, "an index of my own")
+
+    index, used = index_for(tmp_path, base, tmp_path / COMMITTED, DEFAULT_DOCUMENTATION_GLOBS)
+
+    assert used.path is None
+    assert used.passed_over is not None and "no index" in used.passed_over
+    assert index.links
+
+
+def test_an_index_that_does_not_parse_is_rebuilt(tmp_path: Path) -> None:
+    start(tmp_path, {"README.md": DOCS, "src/fetch.py": SOURCE})
+    commit(tmp_path, {str(COMMITTED): "{ merge conflict"}, "index")
+
+    _, used = index_for(tmp_path, "HEAD", tmp_path / COMMITTED, DEFAULT_DOCUMENTATION_GLOBS)
+
+    assert used.path is None
+    assert used.passed_over is not None and "cannot be read" in used.passed_over
+
+
+def test_ignored_documentation_is_described_by_no_revision(tmp_path: Path) -> None:
+    # `build_index` walks the directory, not git, so it would index a page
+    # the repository ignores, and a clone at the recorded commit lacks it.
+    start(tmp_path, {"README.md": DOCS, "src/fetch.py": SOURCE, ".gitignore": "docs/private/\n"})
+    (tmp_path / "docs/private").mkdir(parents=True)
+    (tmp_path / "docs/private/notes.md").write_text("# Notes\n")
+
+    assert working_revision(tmp_path, DEFAULT_DOCUMENTATION_GLOBS) is None
+
+
+def test_an_ignored_virtualenv_the_index_never_reads_changes_nothing(tmp_path: Path) -> None:
+    start(tmp_path, {"README.md": DOCS, "src/fetch.py": SOURCE, ".gitignore": ".venv/\n"})
+    (tmp_path / ".venv/lib").mkdir(parents=True)
+    (tmp_path / ".venv/lib/site.py").write_text("def site(): ...\n")
+
+    assert working_revision(tmp_path, DEFAULT_DOCUMENTATION_GLOBS) == rev_parse(
+        tmp_path, "HEAD"
+    )
+
+
 def test_a_clean_working_tree_is_described_by_its_head(tmp_path: Path) -> None:
     start(tmp_path, {"README.md": DOCS, "src/fetch.py": SOURCE})
     # Only files the index reads count: a stray build artefact changes nothing.
