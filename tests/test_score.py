@@ -520,8 +520,8 @@ def test_the_false_positive_rate_is_counted_over_decoys_not_findings() -> None:
     score = Score(
         branches=(
             scored(id="a", found=True),
-            # Two findings on one decoy are one decoy wrongly flagged: the rate
-            # answers how often a harmless change is called drift.
+            # Two findings on one decoy are one decoy wrongly reported: the
+            # rate answers how often a harmless change is called drift.
             scored(id="b", decoy=True, found=False, spurious=(wrong, wrong)),
             scored(id="c", decoy=True, found=False),
             scored(id="d", decoy=True, found=False),

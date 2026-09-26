@@ -117,15 +117,23 @@ class Score:
         return self.true_positives / planted if planted else None
 
     @property
+    def decoys(self) -> int:
+        return sum(1 for branch in self.branches if branch.decoy)
+
+    @property
+    def spurious_decoys(self) -> int:
+        """Decoys that reported any finding at all."""
+        return sum(1 for branch in self.branches if branch.decoy and branch.spurious)
+
+    @property
     def false_positive_rate(self) -> float | None:
         """How many decoys reported drift, or `None` over no decoys.
 
         Counted by decoy rather than by finding, so it answers how often a
-        change that breaks nothing is called drift, whatever it was called.
+        change that breaks nothing is reported at all, however many findings
+        or disappearances that one decoy produced.
         """
-        decoys = [branch for branch in self.branches if branch.decoy]
-        flagged = sum(1 for branch in decoys if branch.spurious)
-        return flagged / len(decoys) if decoys else None
+        return self.spurious_decoys / self.decoys if self.decoys else None
 
 
 @dataclass(frozen=True)

@@ -611,22 +611,21 @@ def _kind_lines(score: Score) -> list[str]:
 def _rate_lines(score: Score) -> list[str]:
     # All three counts are named rather than left to be subtracted: a false
     # negative is the number this project is worst at and least able to hide.
-    lines = [
+    sentence = (
         f"Precision {_rate(score.precision)} ({score.true_positives} true "
         f"positive{_plural(score.true_positives)}, {score.false_positives} false "
         f"positive{_plural(score.false_positives)}). "
         f"Recall {_rate(score.recall)} ({score.true_positives} true "
         f"positive{_plural(score.true_positives)}, {score.false_negatives} false "
         f"negative{_plural(score.false_negatives)})."
-    ]
-    decoys = [branch for branch in score.branches if branch.decoy]
-    if decoys:
-        flagged = sum(1 for branch in decoys if branch.spurious)
-        lines[0] += (
+    )
+    if score.decoys:
+        sentence += (
             f" False positive rate {_rate(score.false_positive_rate)} "
-            f"({flagged} of {len(decoys)} decoy{_plural(len(decoys))} reported drift)."
+            f"({score.spurious_decoys} of {score.decoys} "
+            f"decoy{_plural(score.decoys)} reported drift)."
         )
-    return lines
+    return [sentence]
 
 
 def _decoy_kind_lines(score: Score) -> list[str]:

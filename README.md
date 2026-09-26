@@ -27,13 +27,14 @@ judgement the tool makes is reachable offline and testable without it.
    split at every heading. Links are proposed by name matching and,
    optionally, by embedding similarity: one numpy matrix product, no vector
    database (ADR-0002). Each link records which mechanism proposed it.
-2. **Compare.** The files a pull request modified, reduced to the chunks whose
-   syntax trees changed, reduced again to the sections linked to them. Comments,
-   formatting and docstring edits do not survive a parse, so they cannot
-   produce a finding.
-3. **Verify.** Each linked section is put to the model with the chunk as it
-   read before the change and after: is the section still accurate? Sections
-   found accurate are reported too, so silence about a section means it was
+2. **Compare.** The files a pull request modified since it forked from the
+   base branch — the merge base, not the base branch's tip — reduced to the
+   chunks whose syntax trees changed, reduced again to the sections linked to
+   them. Comments, formatting and docstring edits do not survive a parse, so
+   they cannot produce a finding.
+3. **Verify.** Each of those sections is a *suspect*, put to the model with
+   the chunk as it read before the change and after: is it still accurate?
+   Sections found accurate are reported too, so silence about a section means it was
    never in question. A chunk that is gone is looked for first — in the file
    git's rename detection pairs its old file with, then as the one chunk of its
    qualified name that appeared anywhere else. What is left is a
@@ -54,11 +55,14 @@ judgement the tool makes is reachable offline and testable without it.
    place on every push: sections checked, accurate, repaired and flagged, each
    linked to its lines. Proposed repairs go out as one commit on
    `synclint/repairs-N`, in a pull request against the branch under review.
-   `publish` decides nothing itself; the routing is a function of the report.
-   Stdlib `urllib`, no GitHub SDK.
+   Two repairs to one section, or a section that no longer reads as it did
+   when analysed, stay in the comment; so do all repairs, as diffs, when
+   GitHub answers the token 403 on pushing a branch. `publish` decides nothing
+   itself; the routing is a function of the report. Stdlib `urllib`, no GitHub
+   SDK.
 
-Every model response is cached on disk by prompt, a ledger counts tokens and
-dollars, and a spend ceiling is checked before each call rather than after. One
+Every model answer is recorded on disk, keyed by prompt; a ledger counts tokens
+and dollars; and a spend ceiling is checked before each call rather than after. One
 provider serves both the reasoning passes and the embeddings (ADR-0005).
 
 The index is committed at `.synclint/index.json` with the commit it was built at,
@@ -74,7 +78,7 @@ the comment says which index was used and why.
 Every figure here replays from committed answers, costs nothing to reproduce,
 and is the same on every run. Tests pin the corpus and link-recall figures, so
 those cannot drift from the harness that produced them; the humanize replay
-checks itself against its recorded results. The model is gpt-5.4-mini at low reasoning
+compares itself with what the paying run printed. The model is gpt-5.4-mini at low reasoning
 effort, and nothing was tuned against these numbers.
 
 ### On the fixture corpus
@@ -113,8 +117,8 @@ Half of that 0% is the design, not the model: seven decoys raise no suspect and
 cannot produce a finding whatever it says. The other seven reach the model and
 it cleared all seven, which is a small denominator.
 
-Precision is perfect because the model is conservative, and that conservatism is
-where the recall goes. Five of the seven misses are suspects it saw and cleared:
+The model errs toward clearing: nothing it reported was wrong, and five of the
+seven misses are suspects it saw and cleared:
 
 - **Four of the five renamed parameters.** `find(query)` documented,
   `find(text)` shipped, and the model judged that a reader following the page is
@@ -243,7 +247,7 @@ line the Action calls; `validation/humanize/run.sh` replays it for nothing.
 | `naturalsize` gains `separator=" "` | nothing | nothing, cleared | — |
 | a comment in `scientific` reworded | nothing | nothing, never asked | — |
 
-**Seven of seven found, no decoy flagged, three repairs proposed and all three
+**Seven of seven found, no decoy reported, three repairs proposed and all three
 right**, checked by hand against the patched code. Twenty-two model calls cost
 $0.0293.
 
@@ -307,7 +311,8 @@ costs seconds and no money.
 - **Pull requests from forks and from Dependabot go unreviewed.** GitHub gives
   their `pull_request` runs no secrets, so there is no key; the Action warns and
   exits cleanly rather than failing their checks. `pull_request_target` would
-  reach them, and is not the documented trigger because the workflow around the
+  reach them, with repairs degraded to diffs in the comment, and is not the
+  documented trigger because the workflow around the
   Action would then be one careless step from running a stranger's code with
   the repository's key (ADR-0006).
 - **Two in five planted cases go unfound**, and a renamed parameter, the easiest
@@ -321,8 +326,9 @@ costs seconds and no money.
 - **Embedding links are costly for what they add**: one planted pair for 20
   more suspects per run, on one small corpus with one embedding model. The
   threshold was set on this corpus and may not transfer.
-- **A default declared in a constructor is unreachable by name**, and a chunk
-  the change adds is invisible: only code that existed before the change is
+- **A default declared in a constructor is unreachable by name.** Embedding
+  links reach the corpus's one example; whether they reach it in general is
+  unmeasured. A chunk the change adds is invisible too: only code that existed before the change is
   compared, so a page claiming to list everything is not caught falling behind.
 - **A disappearance is only as good as the name link behind it.** It is never
   put to a model, so a deleted method called `write` would flag every section
@@ -330,7 +336,8 @@ costs seconds and no money.
   qualified name: a function renamed, or moved into a class, is reported gone.
 - **Validation grades the same model's work.** It refused none of the seven
   repairs it saw, one of them wrong. The gate caught that one, but cannot catch
-  a wrong repair of an eligible shape.
+  a wrong repair of an eligible shape, and the ground truth that judges repairs
+  is hand-written for seventeen sections.
 - **The calibration table is four repairs deep inside the gate**, and the
   model's confidence did not vary enough to test the threshold at all.
 - **The gate is narrow on purpose.** Every removed capability is flagged even
@@ -343,9 +350,10 @@ costs seconds and no money.
 - **Sections are read at the base.** A pull request that changes a function and
   fixes its documentation together has the section checked as it read before
   the fix, and can be told to fix what it already fixed.
-- **The committed index is judged fresh by file, not by content.** Any change
-  to a Python or documentation file since it was built counts, so the fallback
-  runs more often than it has to, and the fallback links by name only. The
+- **The committed index goes out of date more often than it needs to.** Any
+  Python or documentation file that differs since it was built counts, whether
+  or not the difference touches a chunk or a section, so the fallback runs more
+  often than it has to, and the fallback links by name only. The
   rebuild workflow assumes the default globs, pushes to main (a protection rule
   that refuses its token leaves the index behind), and loses a race with a push
   that lands while it runs. An index does not record which synclint built it.
