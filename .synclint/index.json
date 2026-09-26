@@ -1,5 +1,5 @@
 {
-  "revision": "801482a16efbe6c596b00374b794e1f800874361",
+  "revision": "06975a48e3ef90cb471bbdfc4f52a43ac7360974",
   "documentation_globs": [
     "README.md",
     "docs/**/*.md"
@@ -6007,7 +6007,7 @@
       "heading_path": [
         "synclint"
       ],
-      "text": "A GitHub Action that finds the documentation a pull request made wrong,\nrepairs what it safely can, and flags the rest for a human.\n\nA parameter is renamed, a default changes, a capability is removed, and a\nparagraph in the README is now a lie. Nothing fails and no test goes red.\nsynclint catches it on the pull request, while the author still has the context\nto fix it in two minutes.\n\n[On the GitHub Marketplace](https://github.com/marketplace/actions/synclint) \u00b7\nPython \u00b7 gpt-5.4-mini \u00b7 227 tests, mypy strict"
+      "text": "[![CI](https://github.com/AnshChhikara001/synclint/actions/workflows/ci.yml/badge.svg)](https://github.com/AnshChhikara001/synclint/actions/workflows/ci.yml)\n\nA GitHub Action that finds the documentation a pull request made wrong,\nrepairs what it safely can, and flags the rest for a human.\n\nA parameter is renamed, a default changes, a capability is removed, and a\nparagraph in the README is now a lie. Nothing fails and no test goes red.\nsynclint catches it on the pull request, while the author still has the context\nto fix it in two minutes.\n\n[On the GitHub Marketplace](https://github.com/marketplace/actions/synclint) \u00b7\nPython \u00b7 gpt-5.4-mini \u00b7 227 tests, mypy strict"
     },
     {
       "id": "README.md#synclint > A live run",
