@@ -8,11 +8,16 @@ capability is removed, and a paragraph somewhere in the repository is now a lie.
 Nothing fails and no test goes red. synclint runs on the pull request, while the
 author still has the context that makes fixing it a two-minute job.
 
-On a [test pull request](https://github.com/AnshChhikara001/synclint-test/pull/1)
-that changed a default from 3 to 5, it left one comment and opened a
-[pull request of repairs](https://github.com/AnshChhikara001/synclint-test/pull/2)
-that changed `3 attempts` to `5 attempts` and nothing else: 67 seconds
-including the image build, four model calls, $0.0018.
+It is on the [GitHub Marketplace](https://github.com/marketplace/actions/synclint).
+On a [test pull request](https://github.com/AnshChhikara001/synclint-test/pull/3)
+that changed a default from 3 to 10, the released `@v1` left one comment and
+opened a [pull request of repairs](https://github.com/AnshChhikara001/synclint-test/pull/4)
+that changed `3 attempts` to `10 attempts` and nothing else: 66 seconds
+including the image build, four model calls, $0.0020.
+
+![The code and documentation before the change](docs/demo/before.png)
+![The pull request, and synclint's run on it](docs/demo/pull-request-and-run.png)
+![synclint's comment, and the pull request of repairs it opened](docs/demo/comment-and-repair.png)
 
 ## How it works
 
