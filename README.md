@@ -1,135 +1,88 @@
 # synclint
 
-A GitHub Action that detects when a code change has made documentation inaccurate,
-repairs what it can, and flags the rest for human review.
+A GitHub Action that finds the documentation a pull request made inaccurate,
+repairs what it safely can, and flags the rest for a human.
 
 Documentation goes wrong silently. A parameter is renamed, a default changes, a
 capability is removed, and a paragraph somewhere in the repository is now a lie.
 Nothing fails and no test goes red. synclint runs on the pull request, while the
 author still has the context that makes fixing it a two-minute job.
 
+On a [test pull request](https://github.com/AnshChhikara001/synclint-test/pull/1)
+that changed a default from 3 to 5, it left one comment and opened a
+[pull request of repairs](https://github.com/AnshChhikara001/synclint-test/pull/2)
+that changed `3 attempts` to `5 attempts` and nothing else: 67 seconds
+including the image build, four model calls, $0.0018.
+
 ## How it works
 
-Three operations with no hidden coupling. `build_index` walks a repository and
-records its chunks of code, its sections of prose, and the links between them.
-`analyse` takes that index and two git revisions, finds the sections linked to
-chunks the change touched, and asks a model whether each is still accurate.
-`publish` writes the result to GitHub. Neither of the first two needs network
-access to GitHub, so every judgement the tool makes is reachable offline.
+Three operations with no hidden coupling. `build_index` records a repository's
+chunks of code, its sections of prose, and the links between them. `analyse`
+takes that index and two git revisions and decides what drifted. `publish`
+writes the result to GitHub. Neither of the first two talks to GitHub, so every
+judgement the tool makes is reachable offline and testable without it.
 
-## What works today
+1. **Index.** Chunks come from the standard library's `ast` — signature,
+   docstring and decorators, never bodies (ADR-0001). Sections are markdown
+   split at every heading. Links are proposed by name matching and,
+   optionally, by embedding similarity: one numpy matrix product, no vector
+   database (ADR-0002). Each link records which mechanism proposed it.
+2. **Compare.** The files a pull request modified, reduced to the chunks whose
+   syntax trees changed, reduced again to the sections linked to them. Comments,
+   formatting and docstring edits do not survive a parse, so they cannot
+   produce a finding.
+3. **Verify.** Each linked section is put to the model with the chunk as it
+   read before the change and after: is the section still accurate? Sections
+   found accurate are reported too, so silence about a section means it was
+   never in question. A chunk that is gone is looked for first — in the file
+   git's rename detection pairs its old file with, then as the one chunk of its
+   qualified name that appeared anywhere else. What is left is a
+   *disappearance*: every section naming it is flagged without a model call,
+   since nothing the model said could make the section right.
+4. **Repair and validate.** Each finding is rewritten into its section. The
+   model answers with quoted spans and their replacements, and synclint applies
+   them itself. A second model pass validates the rewrite. A quote the section
+   does not contain exactly once, or a rewrite validation refuses, becomes a
+   flag with its reason.
+5. **Gate** (ADR-0003). A repair is proposed only if its change has one of two
+   shapes read off the syntax trees: one parameter renamed everywhere it is
+   used, or one default changed with nothing else touched. Inside the gate the
+   model's confidence must reach `--confidence-threshold`, 0.9, set before any
+   answer was recorded. Everything else is flagged, with the rewrite that was
+   tried as a reviewer's starting point.
+6. **Publish.** One summary comment, found by a hidden marker and edited in
+   place on every push: sections checked, accurate, repaired and flagged, each
+   linked to its lines. Proposed repairs go out as one commit on
+   `synclint/repairs-N`, in a pull request against the branch under review.
+   `publish` decides nothing itself; the routing is a function of the report.
+   Stdlib `urllib`, no GitHub SDK.
 
-- **`build_index`** — chunks from `ast` (signature, docstring, decorators, never
-  bodies), sections from markdown split at every heading, links proposed by name
-  matching and, optionally, by embedding similarity above a configurable
-  threshold — one numpy matrix product, no vector database (ADR-0002). Each link
-  records which mechanism proposed it. Renders to JSON and reads back.
-- **`analyse`** — the modified files at two revisions, reduced to the chunks that
-  actually changed, reduced again to the sections linked to them, each put to the
-  model. Comments, formatting and docstring edits do not survive a parse and so
-  cannot produce a finding. Sections checked and found accurate are reported too,
-  so silence about a section means it was never in question.
-- **Deleted code** — a chunk gone after the change is looked for first: in the
-  file git's rename detection pairs its old file with, then as the one chunk of
-  its qualified name that appeared anywhere else. A chunk followed there is
-  compared like any other, and one moved word for word raises nothing. What is
-  left is gone, and every section that names it is a *disappearance*: reported
-  without asking the model, since nothing it said could make the section right,
-  and always flagged, since there is no new code for a repair to describe. The
-  comment lists them apart from the flags.
-- **Repair and validation** — each finding is rewritten into its section, then
-  a second model pass gates the rewrite. The model answers with quoted spans and
-  their replacements, and synclint applies them itself, so prose outside the
-  quotes is byte-identical by construction. In practice the model quotes the
-  whole section nine times in ten, so that guarantee covers little, and how much
-  a repair left alone is measured instead (below). A quote the section does not
-  contain exactly once, or a rewrite validation refuses, becomes a flag with the
-  reason. Repairs print as a diff against the section.
-- **Rules-gated confidence** (ADR-0003) — a repair is proposed only if its change
-  has one of two shapes, read off the syntax trees: one parameter renamed
-  everywhere it is used, or one default value changed, with nothing else
-  touched. Anything else is flagged however confident the model is. Inside the
-  gate the model is asked how likely the repair is exactly right, and must reach
-  `--confidence-threshold` (default 0.9, set before any answer was recorded).
-- **Index lifecycle** — the index is committed at `.synclint/index.json` and
-  records the commit it was built at and the documentation globs it read.
-  `.github/workflows/index.yml` rebuilds it when Python or documentation lands
-  on main. `analyse` trusts it only if no file it reads differs between that
-  commit and the base — content, not commit identity, since the commit that
-  commits an index is never the one it was built at. Otherwise, or when it is
-  missing, the run builds its own at the base from `git archive`, without
-  touching the checkout. An out-of-date index makes a run slower, not wrong, and the
-  report and the comment both say which index was used and why.
-- **Spend control** — every model response cached on disk by prompt, a ledger of
-  tokens and dollars, and a ceiling checked before each call rather than after.
-- **Fixture corpus** — `corpus/` holds a small library with documentation,
-  eighteen deliberately planted drift cases and fourteen decoys that must
-  produce nothing, with ground truth for each. See its own README.
-- **`publish`** — `analyse --pull-request N` writes the report to the pull
-  request. One summary comment, found by a hidden marker and edited in place on
-  every push: sections checked, how many are accurate, repaired and flagged,
-  each linked to the lines it reads on, each flag with its reason and the
-  rewrite that was tried. Repairs go out as one commit on
-  `synclint/repairs-N`, in a pull request targeting the branch under review.
-  Two repairs to one section, or a section that no longer reads as it did when
-  analysed, stay in the comment instead. `publish` decides nothing itself: the
-  routing is a function of the report, tested without GitHub. Stdlib `urllib`,
-  no GitHub SDK.
-- **Accuracy harness** — `python -m synclint score corpus` runs every case and
-  every decoy through `analyse` and matches what came back against the ground
-  truth. It replays recorded answers and cannot make a call, so the numbers
-  below cost nothing to reproduce and do not move between runs.
+Every model response is cached on disk by prompt, a ledger counts tokens and
+dollars, and a spend ceiling is checked before each call rather than after. One
+provider serves both the reasoning passes and the embeddings (ADR-0005).
 
-- **The Action** — `action.yml` and a Dockerfile. The container's entry point
-  reads the `pull_request` event, diffs from where the branch forked rather than
-  from the base branch's tip, and hands the rest to `analyse --pull-request`, so
-  the Action and the command line cannot disagree. The image is 95MB
-  compressed, installed from the lockfile, and built fresh on each run (about
-  12 seconds cold on a laptop).
+The index is committed at `.synclint/index.json` with the commit it was built at,
+and `.github/workflows/index.yml` rebuilds it when Python or documentation lands
+on main. A run trusts it only if no file it reads differs between that commit
+and the base — content, not commit identity, since the commit that commits an
+index is never the one it was built at. Otherwise the run builds its own at the
+base from `git archive`. An out-of-date index makes a run slower, not wrong, and
+the comment says which index was used and why.
 
-First live run, on a test repository whose pull request changed a default
-from 3 to 5: the check took 67 seconds including the image build, and left one
-comment — one section checked, one repaired at 99% confidence, four model
-calls, $0.0018 — and a pull request of repairs that changed `3 attempts` to
-`5 attempts` and nothing else.
+## Measured results
 
-## Using it
+Every figure here replays from committed answers, costs nothing to reproduce,
+and is the same on every run. Tests pin the corpus and link-recall figures, so
+those cannot drift from the harness that produced them; the humanize replay
+checks itself against its recorded results. The model is gpt-5.4-mini at low reasoning
+effort, and nothing was tuned against these numbers.
 
-    name: synclint
-    on: pull_request
-    permissions:
-      contents: write        # the branch of repairs
-      pull-requests: write   # the comment, and the pull request of repairs
-    jobs:
-      synclint:
-        runs-on: ubuntu-latest
-        steps:
-          - uses: actions/checkout@v5
-            with:
-              ref: ${{ github.event.pull_request.head.sha }}  # not the merge commit
-              fetch-depth: 0   # both revisions; a shallow clone is refused
-          - uses: AnshChhikara001/synclint@main
-            with:
-              api-key: ${{ secrets.OPENAI_API_KEY }}
+### On the fixture corpus
 
-The other inputs — `documentation-glob`, `model`, `confidence-threshold`,
-`ceiling` — default to the command line's defaults; `action.yml` describes each.
-The key reaches the container as an environment variable, never as an argument,
-because the runner prints a container's arguments. The head is checked out
-rather than GitHub's default merge commit so that the working tree is the code
-under review; the index a run uses describes the base either way.
-
-To keep a committed index fresh, copy `.github/workflows/index.yml`, installing
-synclint with `pip install git+https://github.com/AnshChhikara001/synclint@main`
-in place of `pip install .`. Without it every run builds its own index, which
-costs seconds and no money: only embedding links cost anything, and a run's own
-index is name links only.
-
-## Measured so far
-
-Against the fixture corpus, with gpt-5.4-mini at low reasoning effort. Recording
-the 31 answers cost $0.0217; replaying them costs nothing and gives the same
-figures every time:
+`corpus/` is a small library, eleven modules and nine markdown pages, with
+eighteen planted drift cases and fourteen decoys — changes that break nothing
+and must produce nothing — each with ground truth. Recording its 31
+verification answers cost $0.0217.
 
     python -m synclint score corpus
 
@@ -142,43 +95,52 @@ figures every time:
 | deleted-chunk | 1 | 1 | 100% |
 | All | 18 | 11 | 61% |
 
-**Precision 100%** (11 true positives, 0 false positives). **Recall 61%.** Of
-the fourteen decoys, seven raise no suspect and cannot produce a finding at
-all; the seven that do reach the model were all cleared by it. The eleventh
-true positive is the deleted chunk, which is found without a model call; it
-was added with #10, and the 59% the first ten came to has not moved.
+**Precision 100%** (11 true positives, 0 false positives). **Recall 61%** (11
+true positives, 7 false negatives). **False positive rate 0%** (0 of 14 decoys
+reported drift).
+
+| Decoy kind | Decoys | Reach the model | False positives |
+| --- | --- | --- | --- |
+| internal-refactor | 4 | 4 | 0 |
+| added-parameter | 3 | 3 | 0 |
+| comment-edit | 2 | 0 | 0 |
+| test-only | 2 | 0 | 0 |
+| formatting | 2 | 0 | 0 |
+| moved-chunk | 1 | 0 | 0 |
+| All | 14 | 7 | 0 |
+
+Half of that 0% is the design, not the model: seven decoys raise no suspect and
+cannot produce a finding whatever it says. The other seven reach the model and
+it cleared all seven, which is a small denominator.
 
 Precision is perfect because the model is conservative, and that conservatism is
-where the missing recall goes. Two of the seven misses never reach the model,
-and the other five are suspects it saw and cleared:
+where the recall goes. Five of the seven misses are suspects it saw and cleared:
 
-- **Four of the five `renamed-parameter` cases.** `find(query)` documented,
+- **Four of the five renamed parameters.** `find(query)` documented,
   `find(text)` shipped, and the model judged that a reader following the page is
-  not misled. Anyone calling it by keyword gets a `TypeError`. This is the one
-  that should be fixed and the number that will say whether it was.
-- **One `changed-default` case**, where `read_csv` stopped skipping invalid rows
-  and started raising on them.
-- **Two never reach the model at all** — a default that lives in `__init__`
-  while the prose names the class, and a wholly new method. Both are recorded
-  in the manifest as the gaps in the tool that they are.
+  not misled. Anyone calling it by keyword gets a `TypeError`. This is the
+  first thing to fix, and the harness will say whether it was fixed for two
+  cents.
+- **One changed default**, where `read_csv` stopped skipping invalid rows and
+  started raising on them.
 
-The first run of this harness scored 50%, not 59%, and the difference is not an
-improvement to the tool: it is the corpus admitting it was wrong. Five cases
-asserted that code gaining an undocumented parameter is drift, which the
-verification prompt denies in as many words and the glossary settles against —
-drift is a section that is *inaccurate*, and a page that never mentioned the new
-parameter is merely silent. Three of those five are decoys now, and the two
-whose pages make a claim the change falsifies stayed. `corpus/README.md` has
-the argument in full. Nothing about the tool's behaviour changed, and no answer
-was re-asked: the same recorded run is simply scored against ground truth that
-is no longer arguing with itself.
+The other two never reach the model: a default that lives in `__init__` while
+the prose names the class, and a wholly new method.
+
+The first scoring read 50%, and the difference is not an improvement to the
+tool. Five cases asserted that code gaining an undocumented parameter is drift;
+the verification prompt denies it and the glossary settles against it — drift
+is a section that is *inaccurate*, and a page that never mentioned the new
+parameter is merely silent. Three became decoys; the two whose pages make a
+claim the change falsifies stayed. No answer was re-asked: the same recorded
+run was scored against ground truth that no longer argued with itself.
+`corpus/README.md` has the argument in full.
 
 ### What embedding links buy
 
 The same harness measures link recall — how many planted section-chunk pairs
-the index links at all — by name matching alone and with embeddings
-(text-embedding-3-small) added. The vectors are committed too, so this also
-replays for free:
+the index links at all — by name alone and with text-embedding-3-small added.
+The vectors are committed, so this replays for free too.
 
 | Links | Pairs linked | Planted pairs linked | Link recall | Suspects on cases | Suspects on decoys |
 | --- | --- | --- | --- | --- | --- |
@@ -188,12 +150,9 @@ replays for free:
 **The delta is one case**, and it costs 36 more links and 20 more questions to
 the model per corpus run, four of them on decoys. The pair gained is
 `shelf-capacity-default`: the prose describes a constructor default and names
-the class, and the embedding puts it next to `Shelf.__init__` (0.597) where
-name matching cannot. The other miss, a newly added method, has no chunk at the base
-for anything to link to.
-
-The threshold sweep says the trade is lumpy rather than smooth — at 0.6 and above
-the embeddings add links but not that case, and below 0.55 they add only suspects:
+the class, and the embedding puts it next to `Shelf.__init__` at 0.597, where
+name matching cannot. The other miss, a new method, has no chunk at the base for
+anything to link to.
 
 | Threshold | Pairs linked | Link recall | Suspects on cases | Suspects on decoys |
 | --- | --- | --- | --- | --- |
@@ -203,22 +162,21 @@ the embeddings add links but not that case, and below 0.55 they add only suspect
 | 0.50 | 124 | 94% | 48 | 23 |
 | 0.45 | 164 | 94% | 60 | 26 |
 
-0.55 is the 95th percentile of similarity over every section-chunk pair in the
-corpus, chosen from that distribution rather than from the cases. Embedding the
-corpus's 75 sections and chunks cost 2,400 tokens, **$0.000048**. On a corpus
-whose pages name what they document, name matching was already doing nearly all
-the work; embeddings are a narrow fix for one shape of miss, not a general
-improvement.
-
-Findings are still scored over name links. The extra suspects have no recorded
-answers yet, so whether the model then finds the shelf case is unmeasured.
+The trade is lumpy, not smooth: at 0.60 and above the embeddings add links but
+not that case, and below 0.55 only suspects. 0.55 is the 95th percentile of
+similarity over every section-chunk pair in the corpus, chosen from that
+distribution rather than from the cases. Embedding the corpus cost 2,400
+tokens, $0.000048. On pages that name what they document, name matching was
+already doing nearly all the work. Findings are still scored over name links:
+the extra suspects have no recorded answers, so whether the model then finds
+the shelf case is unmeasured.
 
 ### What repairs look like
 
-Every found case is repaired and validated, and the manifest carries ground
-truth for each repair — text a correct one must say and text it must no longer
-say — so validation, itself a model's judgement, is scored against something
-that is not. Recording the 17 repair and validation answers cost **$0.0139**.
+The manifest carries ground truth for every repair — text a correct one must
+say, and text it must no longer say — so validation, itself a model's
+judgement, is scored against something that is not. Recording the 17 repair and
+validation answers cost $0.0139, and the three confidence answers $0.0022.
 
 | Repaired case | Shape | Outcome | Confidence | Ground truth | Text kept |
 | --- | --- | --- | --- | --- | --- |
@@ -236,10 +194,10 @@ that is not. Recording the 17 repair and validation answers cost **$0.0139**.
 **Validation passed all seven it saw, one of them wrong. The gate stopped that
 one.** The `is_valid` repair admits ten-digit ISBNs but keeps the advice to
 convert them first, which the change made pointless. Its change rewrites a
-function body, which is not a shape the gate admits, so it is flagged. The
-price: three correct repairs are flagged with it, because a removed capability
-is never one narrow shape. **Three proposed, three correct**, where validation
-alone proposed seven with one wrong.
+function body, not a shape the gate admits, so it is flagged. The price is three
+correct repairs flagged with it, because a removed capability is never one
+narrow shape. **Three proposed, three correct**, where validation alone would
+have proposed seven with one wrong.
 
 | Shape | Repairs | Correct | Proposed at ≥ 90% | Proposed and correct |
 | --- | --- | --- | --- | --- |
@@ -247,35 +205,29 @@ alone proposed seven with one wrong.
 | changed-default | 3 | 2 (67%) | 2 | 2 |
 | outside the gate | 6 | 3 (50%) | 0 | 0 |
 
-The rules did all of the work and the threshold none. The model gave the three
+The rules did all of the work and the threshold none: the model gave the three
 repairs inside the gate 97–98%, so any threshold up to 0.97 proposes the same
 three. The gate's shapes agree with the manifest's hand-written kinds on all
 sixteen cases that change a chunk, though the rules were written from the ADR,
-not from the corpus. Recording the three confidence answers cost **$0.0022**.
+not from the corpus.
 
 Three repairs never reached validation because their quotes did not match the
-section. Two quoted the whole section plus a newline it does not end with, and
-one garbled the quote itself. Text kept is lowest where a capability was
-removed, where the right repair deletes a clause, but it is also low because
-nine of the ten repairs quoted the whole section and rewrote it.
-
-That last point was tested, and the idea failed. Telling the repair pass to
-quote only the wrong words, and refusing a whole-section quote in code, should
-have shrunk the quotes. It did not: seven of ten still quoted everything, the
-guard refused all seven, and one repair in ten came out proposed and correct.
-That cost $0.0114 and is reverted. Commit `68c98d0` keeps its answers, so the
-numbers can be recomputed.
+section — two quoted the whole section plus a newline it does not end with, one
+garbled the quote. Text kept is low partly because nine of the ten repairs
+quoted the whole section and rewrote it. Telling the repair pass to quote only
+the wrong words, and refusing a whole-section quote in code, was tried: seven
+of ten still quoted everything, the guard refused all seven, and one repair in
+ten came out proposed and correct. That cost $0.0114 and is reverted; commit
+`68c98d0` keeps its answers so the numbers can be recomputed.
 
 ### On a real repository
 
-The corpus was written by the same hand as the tool, so the same eleven-way
-test was run on code nobody here wrote:
-[humanize](https://github.com/python-humanize/humanize) at `392aef7`, its
-README split into eighteen sections with sixteen name links
-(`validation/humanize/index.json`). Seven changes break a README example; four are decoys that break nothing. Each
-is a patch in `validation/humanize/changes/`, planted as its own branch off the
-pinned commit, and analysed through the command line the Action calls. The
-answers are committed, so `validation/humanize/run.sh` replays it for nothing.
+The corpus was written by the same hand as the tool, so the same test was run
+on code nobody here wrote: [humanize](https://github.com/python-humanize/humanize)
+at `392aef7`, its README split into eighteen sections with sixteen name links.
+Seven changes break a README example and four are decoys that break nothing.
+Each is a patch in `validation/humanize/changes/`, analysed through the command
+line the Action calls; `validation/humanize/run.sh` replays it for nothing.
 
 | Change | Should | Did | Repair |
 | --- | --- | --- | --- |
@@ -292,115 +244,119 @@ answers are committed, so `validation/humanize/run.sh` replays it for nothing.
 | a comment in `scientific` reworded | nothing | nothing, never asked | — |
 
 **Seven of seven found, no decoy flagged, three repairs proposed and all three
-right**, checked by hand against the patched code; the flags' drafts are in
-the recorded answers. Twenty-two model calls cost **$0.0293**, against $0.30
-set aside.
+right**, checked by hand against the patched code. Twenty-two model calls cost
+$0.0293.
 
-The first run found five: both misses were the same gap, and neither was the
-model's fault. A deleted function had no chunk on the head side, so nothing was
-compared and nothing asked. The rename was worse: `naturalday` vanishing was
-equally invisible, but `naturaldate`, which calls it, changed two lines — so
-the section that calls `humanize.naturalday` three times was verified, against
-`naturaldate`, and rightly judged still accurate *about `naturaldate`*. The
-report said one section was verified and none drifted, true and misleading.
-#10 closed it: both sections are now disappearances, found on replay without
-a model call, and nothing else in the eleven results moved.
+The first run found five, and both misses were the same gap. A deleted function
+had no chunk after the change, so nothing was compared. The rename was worse:
+`naturaldate`, which calls `naturalday`, changed two lines, so the section that
+calls `naturalday` three times was verified against `naturaldate` and rightly
+judged accurate *about `naturaldate`* — one section verified, none drifted,
+true and misleading. Following deleted chunks turned both into disappearances,
+found on replay without a model call, and nothing else in the eleven moved.
 
 Two things went better than on the corpus. Every repair quoted only the lines
-it changed, where nine in ten corpus repairs quoted the whole section; these
-pages are doctest examples, one claim per line, which likely explains it more
-than anything synclint did. And name matching, wrong about every link on
-synclint's own README, proposed no link here that was not right, because
-humanize's prose names functions in full, as `humanize.naturalsize(...)`.
+it changed; these pages are doctest examples, one claim per line, which likely
+explains it more than anything synclint did. And name matching proposed no
+wrong link, because humanize's prose names functions in full, as
+`humanize.naturalsize(...)`. This ran from the command line, not as an
+installed Action; the Action's path from event to `analyse` is exercised by the
+live run above.
 
-It ran from the command line, not as an installed Action: that needs a fork
-of humanize carrying these eleven pull requests, and the Action's own path
-from event to `analyse` is already exercised by the live run above.
+The suite is 227 tests under mypy strict, with no API spend: every test replays
+a recorded answer or injects a fake.
 
-225 tests, mypy strict, no API spend in the suite — every test replays a recorded
-answer or injects a fake.
+## Using it
+
+    name: synclint
+    on: pull_request
+    permissions:
+      contents: write        # the branch of repairs
+      pull-requests: write   # the comment, and the pull request of repairs
+    jobs:
+      synclint:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v5
+            with:
+              ref: ${{ github.event.pull_request.head.sha }}  # not the merge commit
+              fetch-depth: 0   # both revisions; a shallow clone is refused
+          - uses: AnshChhikara001/synclint@v1
+            with:
+              api-key: ${{ secrets.OPENAI_API_KEY }}
+
+The other inputs — `documentation-glob`, `model`, `confidence-threshold`,
+`ceiling` — default to the command line's defaults; `action.yml` describes each.
+The key reaches the container as an environment variable, never an argument,
+because the runner prints a container's arguments. The head is checked out
+rather than GitHub's merge commit so the working tree is the code under review.
+
+To keep a committed index fresh, copy `.github/workflows/index.yml`, installing
+synclint with `pip install git+https://github.com/AnshChhikara001/synclint@v1`
+in place of `pip install .`. Without it every run builds its own index, which
+costs seconds and no money.
 
 ## Limitations
 
-- **Two in five planted cases still go unfound.** Nothing here is tuned: the
-  figures above are the first measurement, taken at low reasoning effort on the
-  cheapest model, and a renamed parameter — the easiest drift there is — is
-  found one time in five. Whether the effort or the prompt is to blame is a
-  question the harness can now answer for two cents.
-- **Name matching is permissive.** It costs nothing on the corpus, whose pages
-  are short and name what they document, but pointed at this repository every
+- **Python only.** Chunks come from the standard library's `ast` (ADR-0001); a
+  change in any other language raises nothing.
+- **Docstrings are not checked** (ADR-0004). Documentation means markdown under
+  the configured globs. A docstring is part of the chunk it documents, and
+  drift between a thing and a part of itself is a different problem. This is a
+  scope boundary, not a gap to close.
+- **Pull requests from forks and from Dependabot go unreviewed.** GitHub gives
+  their `pull_request` runs no secrets, so there is no key; the Action warns and
+  exits cleanly rather than failing their checks. `pull_request_target` would
+  reach them, and is not the documented trigger because the workflow around the
+  Action would then be one careless step from running a stranger's code with
+  the repository's key (ADR-0006).
+- **Two in five planted cases go unfound**, and a renamed parameter, the easiest
+  drift there is, is found one time in five. Whether reasoning effort or the
+  prompt is to blame is untested.
+- **Name matching is permissive.** It costs nothing on the corpus and humanize,
+  whose pages name what they document, but pointed at this repository every
   link it proposes is wrong — `id`, `write`, `spend` and `git` all match as
-  ordinary English words in prose. The 100% above is precision over findings on
-  a well-behaved corpus, and it is not a claim about links in general.
-- **Embedding links are costly for what they add.** One planted pair gained for
-  20 more suspects per corpus run, on one small corpus with one embedding model.
-  The threshold was set on this corpus and may not transfer.
-- **A default declared in a constructor is unreachable by name.** The default
-  lives in `__init__` while the prose names the class. Embedding links reach the
-  corpus's one example; whether they reach it in general is unmeasured.
-- **A chunk the change adds is invisible.** Only chunks that existed before
-  the change are compared, so new code nothing documents yet raises nothing,
-  and a page claiming to list everything is not caught falling out of date.
-- **Sections are read at the base.** The index, committed or built for the
-  run, describes the base, so a pull request that changes a function and fixes
-  its documentation in the same pull request has the section checked as it read
-  before the fix, and can be told to fix what it already fixed. Before #11 the
-  Action indexed the head instead, and missed every disappearance.
-- **Freshness is judged by file, not by what the index holds.** Any change to a
-  Python or documentation file since it was built counts as out of date, a function
-  body included, so on a busy branch the fallback runs more often than it has
-  to. The rebuild commit also loses a race with a push that lands while it
-  runs, and the next pull request builds its own until the following rebuild.
-- **The fallback links by name only.** A committed index built with `--embed`
-  is replaced, when out of date, by one without its embedding links.
-- **The workflow assumes the default documentation globs.** Its path filter
-  and its `index` step name them; a repository with its own has to change both,
-  or every run builds its own index.
-- **The rebuild pushes to main.** A branch protection rule that refuses the
-  workflow's token leaves the index to fall behind, and every run builds its
-  own.
-- **An index does not record which synclint built it.** One built before a
-  change to how chunks or links are made still reads as current.
-- **The fallback reads the base through `git archive`,** so documentation a
-  repository marks `export-ignore`, and anything in a submodule, is missing
-  from an index built for a run.
+  ordinary English. The 100% is precision over findings on well-behaved pages,
+  not a claim about links in general.
+- **Embedding links are costly for what they add**: one planted pair for 20
+  more suspects per run, on one small corpus with one embedding model. The
+  threshold was set on this corpus and may not transfer.
+- **A default declared in a constructor is unreachable by name**, and a chunk
+  the change adds is invisible: only code that existed before the change is
+  compared, so a page claiming to list everything is not caught falling behind.
 - **A disappearance is only as good as the name link behind it.** It is never
   put to a model, so a deleted method called `write` would flag every section
-  that uses the word. A move is followed only when it is unambiguous and keeps
-  the qualified name: a function renamed, or moved into a class, is reported
-  gone, and a rename is also its new name's first appearance, which nothing
-  links to.
+  using the word. A move is followed only when it is unambiguous and keeps the
+  qualified name: a function renamed, or moved into a class, is reported gone.
 - **Validation grades the same model's work.** It refused none of the seven
-  repairs it saw, one of them wrong. The gate caught that one here, but the
-  gate cannot catch a wrong repair of an eligible shape, and the ground truth
-  that judges it is hand-written for seventeen sections.
-- **The calibration table is four repairs deep inside the gate.** Nothing about
-  whether 90% from the model means 90% right can be read from it yet, and the
+  repairs it saw, one of them wrong. The gate caught that one, but cannot catch
+  a wrong repair of an eligible shape.
+- **The calibration table is four repairs deep inside the gate**, and the
   model's confidence did not vary enough to test the threshold at all.
-- **The gate is narrow on purpose.** Every removed capability is flagged, even
-  when the repair is right, and a flagged finding outside the gate still pays
-  for a repair and its validation so the reviewer has a rewrite to start from.
-- **A repair rewrites the whole section.** The model will not quote small at
-  low reasoning effort, even when told to, so byte-identity outside the edits
-  holds only in name. Text kept measures the damage; nothing bounds it.
-- **Quotes must match exactly.** Three of ten repairs were lost to that, two to
-  a trailing newline.
-- **Pull requests from forks and from Dependabot go unreviewed.** GitHub gives
-  their `pull_request` runs no Actions secrets, so there is no key; the Action
-  warns and exits cleanly rather than failing their checks. `pull_request_target`
-  would reach them, and is not the documented trigger because the workflow
-  around the Action would then be one careless step from running a stranger's
-  code with the repository's key (ADR-0006). Under it, repairs degrade to
-  diffs in the comment, as they do for a token GitHub answers 403.
-- **The repair pull request triggers the workflow too.** GitHub holds that
-  run for approval, since the Actions bot opened it; approved, it would find no
-  code changed and add a comment saying so.
+- **The gate is narrow on purpose.** Every removed capability is flagged even
+  when the repair is right, and a flagged finding still pays for a repair and
+  its validation so the reviewer has a draft.
+- **A repair rewrites the whole section.** At low reasoning effort the model
+  will not quote small even when told to, so byte-identity outside the edits
+  holds only in name; text kept measures the damage and nothing bounds it.
+  Quotes must also match exactly, and three of ten repairs were lost to that.
+- **Sections are read at the base.** A pull request that changes a function and
+  fixes its documentation together has the section checked as it read before
+  the fix, and can be told to fix what it already fixed.
+- **The committed index is judged fresh by file, not by content.** Any change
+  to a Python or documentation file since it was built counts, so the fallback
+  runs more often than it has to, and the fallback links by name only. The
+  rebuild workflow assumes the default globs, pushes to main (a protection rule
+  that refuses its token leaves the index behind), and loses a race with a push
+  that lands while it runs. An index does not record which synclint built it.
+  The fallback reads the base through `git archive`, so `export-ignore` files
+  and submodules are missing from it.
+- **The repair branch is rebuilt on every push**, so a human's amendment to
+  `synclint/repairs-N` is overwritten, and a repair pull request stays open
+  after a push that leaves nothing to repair. It also triggers the workflow
+  itself, which GitHub holds for approval.
 - **The image is built on every run**, not pulled from a registry: 95MB
-  compressed and 436MB unpacked, of which git's layer is 92MB and numpy 68MB.
-- **The repair branch is rebuilt on every push.** Repairs are recomputed
-  against the new head, so a human's amendment to `synclint/repairs-N` is
-  overwritten, and a repair pull request stays open after a push that leaves
-  nothing to repair.
+  compressed, about 12 seconds cold on a laptop.
 
 `CONTEXT.md` is the glossary; `docs/adr/` holds the decisions and what was
-rejected.
+rejected; `corpus/README.md` describes every case and decoy.
