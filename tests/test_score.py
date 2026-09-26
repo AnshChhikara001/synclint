@@ -515,6 +515,38 @@ def test_the_report_carries_precision_recall_and_what_it_cost() -> None:
     assert "| decoy/c | docs/a.md#A | a.py::f |" in report
 
 
+def test_the_false_positive_rate_is_counted_over_decoys_not_findings() -> None:
+    wrong = Finding(section="docs/a.md#A", chunk="a.py::f", explanation="no")
+    score = Score(
+        branches=(
+            scored(id="a", found=True),
+            # Two findings on one decoy are one decoy wrongly flagged: the rate
+            # answers how often a harmless change is called drift.
+            scored(id="b", decoy=True, found=False, spurious=(wrong, wrong)),
+            scored(id="c", decoy=True, found=False),
+            scored(id="d", decoy=True, found=False),
+            scored(id="e", decoy=True, found=False),
+        ),
+        unrecorded=(),
+        unfinished=0,
+        spend=Spend(),
+    )
+
+    assert score.false_positive_rate == 0.25
+    assert (
+        "False positive rate 25% (1 of 4 decoys reported drift)." in render_score(score)
+    )
+
+
+def test_a_corpus_without_decoys_has_no_false_positive_rate() -> None:
+    score = Score(
+        branches=(scored(id="a", found=True),), unrecorded=(), unfinished=0, spend=Spend()
+    )
+
+    assert score.false_positive_rate is None
+    assert "False positive rate" not in render_score(score)
+
+
 def outcome(**fields: object) -> RepairOutcome:
     defaults: dict[str, object] = {
         "shape": "renamed-parameter",
@@ -779,6 +811,7 @@ def test_the_shipped_corpus_scores_what_the_readme_publishes(shipped: Corpus) ->
     assert score.false_positives == 0
     assert score.recall == 11 / 18
     assert score.precision == 1.0
+    assert score.false_positive_rate == 0.0
 
     reached = [
         result for result in score.branches if result.decoy and result.verified

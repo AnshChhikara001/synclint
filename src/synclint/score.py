@@ -116,6 +116,17 @@ class Score:
         planted = self.true_positives + self.false_negatives
         return self.true_positives / planted if planted else None
 
+    @property
+    def false_positive_rate(self) -> float | None:
+        """How many decoys reported drift, or `None` over no decoys.
+
+        Counted by decoy rather than by finding, so it answers how often a
+        change that breaks nothing is called drift, whatever it was called.
+        """
+        decoys = [branch for branch in self.branches if branch.decoy]
+        flagged = sum(1 for branch in decoys if branch.spurious)
+        return flagged / len(decoys) if decoys else None
+
 
 @dataclass(frozen=True)
 class Linking:
