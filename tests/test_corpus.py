@@ -1,4 +1,5 @@
 import json
+import os
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
@@ -132,6 +133,44 @@ def test_a_case_that_changes_nothing_is_refused(tmp_path: Path) -> None:
 
     with pytest.raises(CorpusError, match="changes nothing"):
         build_corpus(source, tmp_path / "built")
+
+
+def test_a_case_the_same_size_and_age_as_the_base_still_changes_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A fresh clone gives every file the same modification time, and git on
+    # Linux compares ctime only to the second, which a build can run inside.
+    # An overlay the same size as the file it rewrites is then invisible to
+    # git's stat check unless the copy stamps it with a new time.
+    source = tmp_path / "corpus"
+    write_corpus(
+        source,
+        base={"catalogue.py": CATALOGUE, "docs/catalogue.md": DOCS},
+        cases={
+            "find-limit-default": {
+                "catalogue.py": CATALOGUE.replace("limit=20", "limit=50")
+            }
+        },
+        manifest=[
+            {
+                **FIND_QUERY_RENAMED,
+                "id": "find-limit-default",
+                "kind": "changed-default",
+                "description": "find returns at most fifty books by default",
+            }
+        ],
+    )
+    for path in source.rglob("*"):
+        os.utime(path, (1_700_000_000, 1_700_000_000))
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.trustctime")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "false")
+
+    corpus = build_corpus(source, tmp_path / "built")
+
+    assert "limit=50" in file_at(
+        corpus.root, case_ref("find-limit-default"), "catalogue.py"
+    )
 
 
 def test_a_manifest_entry_missing_a_field_is_refused(tmp_path: Path) -> None:

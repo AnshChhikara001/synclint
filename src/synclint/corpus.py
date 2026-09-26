@@ -215,10 +215,14 @@ def _copy(source: Path, destination: Path, dirs_exist_ok: bool = False) -> None:
     # Bytecode is left behind by anyone who imports the fixture and is not part
     # of it. Copying it would commit whatever happens to be on the developer's
     # disk, and a decoy is audited on the paths its commit touches.
+    # Contents only, not modification times: an overlay keeping the time of a
+    # fresh clone, the same size as the file it rewrites, passes git's stat
+    # check for unchanged and is never committed.
     shutil.copytree(
         source,
         destination,
         ignore=shutil.ignore_patterns("__pycache__"),
+        copy_function=shutil.copy,
         dirs_exist_ok=dirs_exist_ok,
     )
 
