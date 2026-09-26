@@ -11,7 +11,7 @@ synclint catches it on the pull request, while the author still has the context
 to fix it in two minutes.
 
 [On the GitHub Marketplace](https://github.com/marketplace/actions/synclint) ·
-Python · gpt-5.4-mini · 227 tests, mypy strict
+Python · gpt-5.4-mini · 228 tests, mypy strict
 
 ## A live run
 

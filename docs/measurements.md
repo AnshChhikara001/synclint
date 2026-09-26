@@ -192,5 +192,5 @@ wrong link, because humanize's prose names functions in full, as
 installed Action; the Action's path from event to `analyse` is exercised by the
 live run in the README.
 
-The suite is 227 tests under mypy strict, with no API spend: every test replays
+The suite is 228 tests under mypy strict, with no API spend: every test replays
 a recorded answer or injects a fake.
