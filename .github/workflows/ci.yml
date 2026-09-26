@@ -1,0 +1,38 @@
+# Runs the tests and the strict type check on every pull request and on main.
+# No API key is given: every model answer the tests need is recorded in the repo.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer commit makes an in-flight run's answer irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: types, tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.11.21"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      # --locked fails the run if uv.lock disagrees with pyproject.toml.
+      - run: uv sync --locked
+      - name: Types
+        run: uv run mypy
+      - name: Tests
+        run: uv run pytest -q

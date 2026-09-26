@@ -1,5 +1,7 @@
 # synclint
 
+[![CI](https://github.com/AnshChhikara001/synclint/actions/workflows/ci.yml/badge.svg)](https://github.com/AnshChhikara001/synclint/actions/workflows/ci.yml)
+
 A GitHub Action that finds the documentation a pull request made wrong,
 repairs what it safely can, and flags the rest for a human.
 
