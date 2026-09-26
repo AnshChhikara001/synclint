@@ -1,5 +1,5 @@
 {
-  "revision": "222936ac5ffe5534bcb57b7dfc0639edad383a48",
+  "revision": "2e9905b566421143c22fa85a4d0c82349e65cd7e",
   "documentation_globs": [
     "README.md",
     "docs/**/*.md"
@@ -3446,6 +3446,36 @@
       ]
     },
     {
+      "id": "src/synclint/score.py::Score.decoys",
+      "path": "src/synclint/score.py",
+      "qualname": "Score.decoys",
+      "signature": "def decoys(self) -> int",
+      "docstring": null,
+      "decorators": [
+        "property"
+      ]
+    },
+    {
+      "id": "src/synclint/score.py::Score.spurious_decoys",
+      "path": "src/synclint/score.py",
+      "qualname": "Score.spurious_decoys",
+      "signature": "def spurious_decoys(self) -> int",
+      "docstring": "Decoys that reported any finding at all.",
+      "decorators": [
+        "property"
+      ]
+    },
+    {
+      "id": "src/synclint/score.py::Score.false_positive_rate",
+      "path": "src/synclint/score.py",
+      "qualname": "Score.false_positive_rate",
+      "signature": "def false_positive_rate(self) -> float | None",
+      "docstring": "How many decoys reported drift, or `None` over no decoys.\n\nCounted by decoy rather than by finding, so it answers how often a\nchange that breaks nothing is reported at all, however many findings\nor disappearances that one decoy produced.",
+      "decorators": [
+        "property"
+      ]
+    },
+    {
       "id": "src/synclint/score.py::Linking",
       "path": "src/synclint/score.py",
       "qualname": "Linking",
@@ -5758,6 +5788,22 @@
       "decorators": []
     },
     {
+      "id": "tests/test_score.py::test_the_false_positive_rate_is_counted_over_decoys_not_findings",
+      "path": "tests/test_score.py",
+      "qualname": "test_the_false_positive_rate_is_counted_over_decoys_not_findings",
+      "signature": "def test_the_false_positive_rate_is_counted_over_decoys_not_findings() -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
+      "id": "tests/test_score.py::test_a_corpus_without_decoys_has_no_false_positive_rate",
+      "path": "tests/test_score.py",
+      "qualname": "test_a_corpus_without_decoys_has_no_false_positive_rate",
+      "signature": "def test_a_corpus_without_decoys_has_no_false_positive_rate() -> None",
+      "docstring": null,
+      "decorators": []
+    },
+    {
       "id": "tests/test_score.py::outcome",
       "path": "tests/test_score.py",
       "qualname": "outcome",
@@ -5961,7 +6007,7 @@
       "heading_path": [
         "synclint"
       ],
-      "text": "A GitHub Action that detects when a code change has made documentation inaccurate,\nrepairs what it can, and flags the rest for human review.\n\nDocumentation goes wrong silently. A parameter is renamed, a default changes, a\ncapability is removed, and a paragraph somewhere in the repository is now a lie.\nNothing fails and no test goes red. synclint runs on the pull request, while the\nauthor still has the context that makes fixing it a two-minute job."
+      "text": "A GitHub Action that finds the documentation a pull request made inaccurate,\nrepairs what it safely can, and flags the rest for a human.\n\nDocumentation goes wrong silently. A parameter is renamed, a default changes, a\ncapability is removed, and a paragraph somewhere in the repository is now a lie.\nNothing fails and no test goes red. synclint runs on the pull request, while the\nauthor still has the context that makes fixing it a two-minute job.\n\nOn a [test pull request](https://github.com/AnshChhikara001/synclint-test/pull/1)\nthat changed a default from 3 to 5, it left one comment and opened a\n[pull request of repairs](https://github.com/AnshChhikara001/synclint-test/pull/2)\nthat changed `3 attempts` to `5 attempts` and nothing else: 67 seconds\nincluding the image build, four model calls, $0.0018."
     },
     {
       "id": "README.md#synclint > How it works",
@@ -5970,16 +6016,56 @@
         "synclint",
         "How it works"
       ],
-      "text": "Three operations with no hidden coupling. `build_index` walks a repository and\nrecords its chunks of code, its sections of prose, and the links between them.\n`analyse` takes that index and two git revisions, finds the sections linked to\nchunks the change touched, and asks a model whether each is still accurate.\n`publish` writes the result to GitHub. Neither of the first two needs network\naccess to GitHub, so every judgement the tool makes is reachable offline."
+      "text": "Three operations with no hidden coupling. `build_index` records a repository's\nchunks of code, its sections of prose, and the links between them. `analyse`\ntakes that index and two git revisions and decides what drifted. `publish`\nwrites the result to GitHub. Neither of the first two talks to GitHub, so every\njudgement the tool makes is reachable offline and testable without it.\n\n1. **Index.** Chunks come from the standard library's `ast` \u2014 signature,\n   docstring and decorators, never bodies (ADR-0001). Sections are markdown\n   split at every heading. Links are proposed by name matching and,\n   optionally, by embedding similarity: one numpy matrix product, no vector\n   database (ADR-0002). Each link records which mechanism proposed it.\n2. **Compare.** The files a pull request modified since it forked from the\n   base branch \u2014 the merge base, not the base branch's tip \u2014 reduced to the\n   chunks whose syntax trees changed, reduced again to the sections linked to\n   them. Comments, formatting and docstring edits do not survive a parse, so\n   they cannot produce a finding.\n3. **Verify.** Each of those sections is a *suspect*, put to the model with\n   the chunk as it read before the change and after: is it still accurate?\n   Sections found accurate are reported too, so silence about a section means it was\n   never in question. A chunk that is gone is looked for first \u2014 in the file\n   git's rename detection pairs its old file with, then as the one chunk of its\n   qualified name that appeared anywhere else. What is left is a\n   *disappearance*: every section naming it is flagged without a model call,\n   since nothing the model said could make the section right.\n4. **Repair and validate.** Each finding is rewritten into its section. The\n   model answers with quoted spans and their replacements, and synclint applies\n   them itself. A second model pass validates the rewrite. A quote the section\n   does not contain exactly once, or a rewrite validation refuses, becomes a\n   flag with its reason.\n5. **Gate** (ADR-0003). A repair is proposed only if its change has one of two\n   shapes read off the syntax trees: one parameter renamed everywhere it is\n   used, or one default changed with nothing else touched. Inside the gate the\n   model's confidence must reach `--confidence-threshold`, 0.9, set before any\n   answer was recorded. Everything else is flagged, with the rewrite that was\n   tried as a reviewer's starting point.\n6. **Publish.** One summary comment, found by a hidden marker and edited in\n   place on every push: sections checked, accurate, repaired and flagged, each\n   linked to its lines. Proposed repairs go out as one commit on\n   `synclint/repairs-N`, in a pull request against the branch under review.\n   Two repairs to one section, or a section that no longer reads as it did\n   when analysed, stay in the comment; so do all repairs, as diffs, when\n   GitHub answers the token 403 on pushing a branch. `publish` decides nothing\n   itself; the routing is a function of the report. Stdlib `urllib`, no GitHub\n   SDK.\n\nEvery model answer is recorded on disk, keyed by prompt; a ledger counts tokens\nand dollars; and a spend ceiling is checked before each call rather than after. One\nprovider serves both the reasoning passes and the embeddings (ADR-0005).\n\nThe index is committed at `.synclint/index.json` with the commit it was built at,\nand `.github/workflows/index.yml` rebuilds it when Python or documentation lands\non main. A run trusts it only if no file it reads differs between that commit\nand the base \u2014 content, not commit identity, since the commit that commits an\nindex is never the one it was built at. Otherwise the run builds its own at the\nbase from `git archive`. An out-of-date index makes a run slower, not wrong, and\nthe comment says which index was used and why."
     },
     {
-      "id": "README.md#synclint > What works today",
+      "id": "README.md#synclint > Measured results",
       "path": "README.md",
       "heading_path": [
         "synclint",
-        "What works today"
+        "Measured results"
       ],
-      "text": "- **`build_index`** \u2014 chunks from `ast` (signature, docstring, decorators, never\n  bodies), sections from markdown split at every heading, links proposed by name\n  matching and, optionally, by embedding similarity above a configurable\n  threshold \u2014 one numpy matrix product, no vector database (ADR-0002). Each link\n  records which mechanism proposed it. Renders to JSON and reads back.\n- **`analyse`** \u2014 the modified files at two revisions, reduced to the chunks that\n  actually changed, reduced again to the sections linked to them, each put to the\n  model. Comments, formatting and docstring edits do not survive a parse and so\n  cannot produce a finding. Sections checked and found accurate are reported too,\n  so silence about a section means it was never in question.\n- **Deleted code** \u2014 a chunk gone after the change is looked for first: in the\n  file git's rename detection pairs its old file with, then as the one chunk of\n  its qualified name that appeared anywhere else. A chunk followed there is\n  compared like any other, and one moved word for word raises nothing. What is\n  left is gone, and every section that names it is a *disappearance*: reported\n  without asking the model, since nothing it said could make the section right,\n  and always flagged, since there is no new code for a repair to describe. The\n  comment lists them apart from the flags.\n- **Repair and validation** \u2014 each finding is rewritten into its section, then\n  a second model pass gates the rewrite. The model answers with quoted spans and\n  their replacements, and synclint applies them itself, so prose outside the\n  quotes is byte-identical by construction. In practice the model quotes the\n  whole section nine times in ten, so that guarantee covers little, and how much\n  a repair left alone is measured instead (below). A quote the section does not\n  contain exactly once, or a rewrite validation refuses, becomes a flag with the\n  reason. Repairs print as a diff against the section.\n- **Rules-gated confidence** (ADR-0003) \u2014 a repair is proposed only if its change\n  has one of two shapes, read off the syntax trees: one parameter renamed\n  everywhere it is used, or one default value changed, with nothing else\n  touched. Anything else is flagged however confident the model is. Inside the\n  gate the model is asked how likely the repair is exactly right, and must reach\n  `--confidence-threshold` (default 0.9, set before any answer was recorded).\n- **Index lifecycle** \u2014 the index is committed at `.synclint/index.json` and\n  records the commit it was built at and the documentation globs it read.\n  `.github/workflows/index.yml` rebuilds it when Python or documentation lands\n  on main. `analyse` trusts it only if no file it reads differs between that\n  commit and the base \u2014 content, not commit identity, since the commit that\n  commits an index is never the one it was built at. Otherwise, or when it is\n  missing, the run builds its own at the base from `git archive`, without\n  touching the checkout. An out-of-date index makes a run slower, not wrong, and the\n  report and the comment both say which index was used and why.\n- **Spend control** \u2014 every model response cached on disk by prompt, a ledger of\n  tokens and dollars, and a ceiling checked before each call rather than after.\n- **Fixture corpus** \u2014 `corpus/` holds a small library with documentation,\n  eighteen deliberately planted drift cases and fourteen decoys that must\n  produce nothing, with ground truth for each. See its own README.\n- **`publish`** \u2014 `analyse --pull-request N` writes the report to the pull\n  request. One summary comment, found by a hidden marker and edited in place on\n  every push: sections checked, how many are accurate, repaired and flagged,\n  each linked to the lines it reads on, each flag with its reason and the\n  rewrite that was tried. Repairs go out as one commit on\n  `synclint/repairs-N`, in a pull request targeting the branch under review.\n  Two repairs to one section, or a section that no longer reads as it did when\n  analysed, stay in the comment instead. `publish` decides nothing itself: the\n  routing is a function of the report, tested without GitHub. Stdlib `urllib`,\n  no GitHub SDK.\n- **Accuracy harness** \u2014 `python -m synclint score corpus` runs every case and\n  every decoy through `analyse` and matches what came back against the ground\n  truth. It replays recorded answers and cannot make a call, so the numbers\n  below cost nothing to reproduce and do not move between runs.\n\n- **The Action** \u2014 `action.yml` and a Dockerfile. The container's entry point\n  reads the `pull_request` event, diffs from where the branch forked rather than\n  from the base branch's tip, and hands the rest to `analyse --pull-request`, so\n  the Action and the command line cannot disagree. The image is 95MB\n  compressed, installed from the lockfile, and built fresh on each run (about\n  12 seconds cold on a laptop).\n\nFirst live run, on a test repository whose pull request changed a default\nfrom 3 to 5: the check took 67 seconds including the image build, and left one\ncomment \u2014 one section checked, one repaired at 99% confidence, four model\ncalls, $0.0018 \u2014 and a pull request of repairs that changed `3 attempts` to\n`5 attempts` and nothing else."
+      "text": "Every figure here replays from committed answers, costs nothing to reproduce,\nand is the same on every run. Tests pin the corpus and link-recall figures, so\nthose cannot drift from the harness that produced them; the humanize replay\ncompares itself with what the paying run printed. The model is gpt-5.4-mini at low reasoning\neffort, and nothing was tuned against these numbers."
+    },
+    {
+      "id": "README.md#synclint > Measured results > On the fixture corpus",
+      "path": "README.md",
+      "heading_path": [
+        "synclint",
+        "Measured results",
+        "On the fixture corpus"
+      ],
+      "text": "`corpus/` is a small library, eleven modules and nine markdown pages, with\neighteen planted drift cases and fourteen decoys \u2014 changes that break nothing\nand must produce nothing \u2014 each with ground truth. Recording its 31\nverification answers cost $0.0217.\n\n    python -m synclint score corpus\n\n| Drift kind | Planted | Found | Recall |\n| --- | --- | --- | --- |\n| renamed-parameter | 5 | 1 | 20% |\n| changed-default | 5 | 3 | 60% |\n| removed-capability | 5 | 5 | 100% |\n| contradicted-claim | 2 | 1 | 50% |\n| deleted-chunk | 1 | 1 | 100% |\n| All | 18 | 11 | 61% |\n\n**Precision 100%** (11 true positives, 0 false positives). **Recall 61%** (11\ntrue positives, 7 false negatives). **False positive rate 0%** (0 of 14 decoys\nreported drift).\n\n| Decoy kind | Decoys | Reach the model | False positives |\n| --- | --- | --- | --- |\n| internal-refactor | 4 | 4 | 0 |\n| added-parameter | 3 | 3 | 0 |\n| comment-edit | 2 | 0 | 0 |\n| test-only | 2 | 0 | 0 |\n| formatting | 2 | 0 | 0 |\n| moved-chunk | 1 | 0 | 0 |\n| All | 14 | 7 | 0 |\n\nHalf of that 0% is the design, not the model: seven decoys raise no suspect and\ncannot produce a finding whatever it says. The other seven reach the model and\nit cleared all seven, which is a small denominator.\n\nThe model errs toward clearing: nothing it reported was wrong, and five of the\nseven misses are suspects it saw and cleared:\n\n- **Four of the five renamed parameters.** `find(query)` documented,\n  `find(text)` shipped, and the model judged that a reader following the page is\n  not misled. Anyone calling it by keyword gets a `TypeError`. This is the\n  first thing to fix, and the harness will say whether it was fixed for two\n  cents.\n- **One changed default**, where `read_csv` stopped skipping invalid rows and\n  started raising on them.\n\nThe other two never reach the model: a default that lives in `__init__` while\nthe prose names the class, and a wholly new method.\n\nThe first scoring read 50%, and the difference is not an improvement to the\ntool. Five cases asserted that code gaining an undocumented parameter is drift;\nthe verification prompt denies it and the glossary settles against it \u2014 drift\nis a section that is *inaccurate*, and a page that never mentioned the new\nparameter is merely silent. Three became decoys; the two whose pages make a\nclaim the change falsifies stayed. No answer was re-asked: the same recorded\nrun was scored against ground truth that no longer argued with itself.\n`corpus/README.md` has the argument in full."
+    },
+    {
+      "id": "README.md#synclint > Measured results > What embedding links buy",
+      "path": "README.md",
+      "heading_path": [
+        "synclint",
+        "Measured results",
+        "What embedding links buy"
+      ],
+      "text": "The same harness measures link recall \u2014 how many planted section-chunk pairs\nthe index links at all \u2014 by name alone and with text-embedding-3-small added.\nThe vectors are committed, so this replays for free too.\n\n| Links | Pairs linked | Planted pairs linked | Link recall | Suspects on cases | Suspects on decoys |\n| --- | --- | --- | --- | --- | --- |\n| name | 48 | 16 of 18 | 89% | 20 | 11 |\n| name + embedding \u2265 0.55 | 84 | 17 of 18 | 94% | 36 | 15 |\n\n**The delta is one case**, and it costs 36 more links and 20 more questions to\nthe model per corpus run, four of them on decoys. The pair gained is\n`shelf-capacity-default`: the prose describes a constructor default and names\nthe class, and the embedding puts it next to `Shelf.__init__` at 0.597, where\nname matching cannot. The other miss, a new method, has no chunk at the base for\nanything to link to.\n\n| Threshold | Pairs linked | Link recall | Suspects on cases | Suspects on decoys |\n| --- | --- | --- | --- | --- |\n| 0.65 | 55 | 89% | 22 | 11 |\n| 0.60 | 61 | 89% | 24 | 12 |\n| 0.55 | 84 | 94% | 36 | 15 |\n| 0.50 | 124 | 94% | 48 | 23 |\n| 0.45 | 164 | 94% | 60 | 26 |\n\nThe trade is lumpy, not smooth: at 0.60 and above the embeddings add links but\nnot that case, and below 0.55 only suspects. 0.55 is the 95th percentile of\nsimilarity over every section-chunk pair in the corpus, chosen from that\ndistribution rather than from the cases. Embedding the corpus cost 2,400\ntokens, $0.000048. On pages that name what they document, name matching was\nalready doing nearly all the work. Findings are still scored over name links:\nthe extra suspects have no recorded answers, so whether the model then finds\nthe shelf case is unmeasured."
+    },
+    {
+      "id": "README.md#synclint > Measured results > What repairs look like",
+      "path": "README.md",
+      "heading_path": [
+        "synclint",
+        "Measured results",
+        "What repairs look like"
+      ],
+      "text": "The manifest carries ground truth for every repair \u2014 text a correct one must\nsay, and text it must no longer say \u2014 so validation, itself a model's\njudgement, is scored against something that is not. Recording the 17 repair and\nvalidation answers cost $0.0139, and the three confidence answers $0.0022.\n\n| Repaired case | Shape | Outcome | Confidence | Ground truth | Text kept |\n| --- | --- | --- | --- | --- | --- |\n| write-json-path-renamed | renamed-parameter | proposed | 97% | correct | 98% |\n| renew-days-default | changed-default | not applied | \u2014 | not applied | \u2014 |\n| write-csv-columns-default | changed-default | proposed | 98% | correct | 94% |\n| matches-case-sensitive-default | changed-default | proposed | 98% | correct | 81% |\n| remove-returns-nothing | \u2014 | not applied | \u2014 | not applied | \u2014 |\n| load-drops-create-missing | \u2014 | outside the gate | \u2014 | correct | 54% |\n| parse-query-drops-or | \u2014 | not applied | \u2014 | not applied | \u2014 |\n| overdue-drops-grace | \u2014 | outside the gate | \u2014 | correct | 49% |\n| titles-drops-sort | \u2014 | outside the gate | \u2014 | correct | 55% |\n| is-valid-gains-isbn10 | \u2014 | outside the gate | \u2014 | incorrect | 83% |\n\n**Validation passed all seven it saw, one of them wrong. The gate stopped that\none.** The `is_valid` repair admits ten-digit ISBNs but keeps the advice to\nconvert them first, which the change made pointless. Its change rewrites a\nfunction body, not a shape the gate admits, so it is flagged. The price is three\ncorrect repairs flagged with it, because a removed capability is never one\nnarrow shape. **Three proposed, three correct**, where validation alone would\nhave proposed seven with one wrong.\n\n| Shape | Repairs | Correct | Proposed at \u2265 90% | Proposed and correct |\n| --- | --- | --- | --- | --- |\n| renamed-parameter | 1 | 1 (100%) | 1 | 1 |\n| changed-default | 3 | 2 (67%) | 2 | 2 |\n| outside the gate | 6 | 3 (50%) | 0 | 0 |\n\nThe rules did all of the work and the threshold none: the model gave the three\nrepairs inside the gate 97\u201398%, so any threshold up to 0.97 proposes the same\nthree. The gate's shapes agree with the manifest's hand-written kinds on all\nsixteen cases that change a chunk, though the rules were written from the ADR,\nnot from the corpus.\n\nThree repairs never reached validation because their quotes did not match the\nsection \u2014 two quoted the whole section plus a newline it does not end with, one\ngarbled the quote. Text kept is low partly because nine of the ten repairs\nquoted the whole section and rewrote it. Telling the repair pass to quote only\nthe wrong words, and refusing a whole-section quote in code, was tried: seven\nof ten still quoted everything, the guard refused all seven, and one repair in\nten came out proposed and correct. That cost $0.0114 and is reverted; commit\n`68c98d0` keeps its answers so the numbers can be recomputed."
+    },
+    {
+      "id": "README.md#synclint > Measured results > On a real repository",
+      "path": "README.md",
+      "heading_path": [
+        "synclint",
+        "Measured results",
+        "On a real repository"
+      ],
+      "text": "The corpus was written by the same hand as the tool, so the same test was run\non code nobody here wrote: [humanize](https://github.com/python-humanize/humanize)\nat `392aef7`, its README split into eighteen sections with sixteen name links.\nSeven changes break a README example and four are decoys that break nothing.\nEach is a patch in `validation/humanize/changes/`, analysed through the command\nline the Action calls; `validation/humanize/run.sh` replays it for nothing.\n\n| Change | Should | Did | Repair |\n| --- | --- | --- | --- |\n| `naturalsize(binary=)` renamed `iec=` | find | found | proposed, 96%, correct |\n| `scientific` precision default 2 \u2192 3 | find | found | proposed, 99%, correct |\n| `precisedelta` format default `%0.2f` \u2192 `%0.1f` | find | found | proposed, 98%, correct |\n| `fractional(1.5)` gives `3/2`, not `1 1/2` | find | found | flagged (body), draft correct |\n| `naturaldate` gives ISO dates past five months | find | found | flagged (body), draft correct |\n| `apnumber` deleted | find | found, a disappearance | flagged (gone) |\n| `naturalday` renamed `natural_day` | find | found, a disappearance | flagged (gone) |\n| `intcomma` body rewritten, same output | nothing | nothing, cleared | \u2014 |\n| `intword(format=)` renamed, README never passes it | nothing | nothing, cleared | \u2014 |\n| `naturalsize` gains `separator=\" \"` | nothing | nothing, cleared | \u2014 |\n| a comment in `scientific` reworded | nothing | nothing, never asked | \u2014 |\n\n**Seven of seven found, no decoy reported, three repairs proposed and all three\nright**, checked by hand against the patched code. Twenty-two model calls cost\n$0.0293.\n\nThe first run found five, and both misses were the same gap. A deleted function\nhad no chunk after the change, so nothing was compared. The rename was worse:\n`naturaldate`, which calls `naturalday`, changed two lines, so the section that\ncalls `naturalday` three times was verified against `naturaldate` and rightly\njudged accurate *about `naturaldate`* \u2014 one section verified, none drifted,\ntrue and misleading. Following deleted chunks turned both into disappearances,\nfound on replay without a model call, and nothing else in the eleven moved.\n\nTwo things went better than on the corpus. Every repair quoted only the lines\nit changed; these pages are doctest examples, one claim per line, which likely\nexplains it more than anything synclint did. And name matching proposed no\nwrong link, because humanize's prose names functions in full, as\n`humanize.naturalsize(...)`. This ran from the command line, not as an\ninstalled Action; the Action's path from event to `analyse` is exercised by the\nlive run above.\n\nThe suite is 227 tests under mypy strict, with no API spend: every test replays\na recorded answer or injects a fake."
     },
     {
       "id": "README.md#synclint > Using it",
@@ -5988,46 +6074,7 @@
         "synclint",
         "Using it"
       ],
-      "text": "name: synclint\n    on: pull_request\n    permissions:\n      contents: write        # the branch of repairs\n      pull-requests: write   # the comment, and the pull request of repairs\n    jobs:\n      synclint:\n        runs-on: ubuntu-latest\n        steps:\n          - uses: actions/checkout@v5\n            with:\n              ref: ${{ github.event.pull_request.head.sha }}  # not the merge commit\n              fetch-depth: 0   # both revisions; a shallow clone is refused\n          - uses: AnshChhikara001/synclint@main\n            with:\n              api-key: ${{ secrets.OPENAI_API_KEY }}\n\nThe other inputs \u2014 `documentation-glob`, `model`, `confidence-threshold`,\n`ceiling` \u2014 default to the command line's defaults; `action.yml` describes each.\nThe key reaches the container as an environment variable, never as an argument,\nbecause the runner prints a container's arguments. The head is checked out\nrather than GitHub's default merge commit so that the working tree is the code\nunder review; the index a run uses describes the base either way.\n\nTo keep a committed index fresh, copy `.github/workflows/index.yml`, installing\nsynclint with `pip install git+https://github.com/AnshChhikara001/synclint@main`\nin place of `pip install .`. Without it every run builds its own index, which\ncosts seconds and no money: only embedding links cost anything, and a run's own\nindex is name links only."
-    },
-    {
-      "id": "README.md#synclint > Measured so far",
-      "path": "README.md",
-      "heading_path": [
-        "synclint",
-        "Measured so far"
-      ],
-      "text": "Against the fixture corpus, with gpt-5.4-mini at low reasoning effort. Recording\nthe 31 answers cost $0.0217; replaying them costs nothing and gives the same\nfigures every time:\n\n    python -m synclint score corpus\n\n| Drift kind | Planted | Found | Recall |\n| --- | --- | --- | --- |\n| renamed-parameter | 5 | 1 | 20% |\n| changed-default | 5 | 3 | 60% |\n| removed-capability | 5 | 5 | 100% |\n| contradicted-claim | 2 | 1 | 50% |\n| deleted-chunk | 1 | 1 | 100% |\n| All | 18 | 11 | 61% |\n\n**Precision 100%** (11 true positives, 0 false positives). **Recall 61%.** Of\nthe fourteen decoys, seven raise no suspect and cannot produce a finding at\nall; the seven that do reach the model were all cleared by it. The eleventh\ntrue positive is the deleted chunk, which is found without a model call; it\nwas added with #10, and the 59% the first ten came to has not moved.\n\nPrecision is perfect because the model is conservative, and that conservatism is\nwhere the missing recall goes. Two of the seven misses never reach the model,\nand the other five are suspects it saw and cleared:\n\n- **Four of the five `renamed-parameter` cases.** `find(query)` documented,\n  `find(text)` shipped, and the model judged that a reader following the page is\n  not misled. Anyone calling it by keyword gets a `TypeError`. This is the one\n  that should be fixed and the number that will say whether it was.\n- **One `changed-default` case**, where `read_csv` stopped skipping invalid rows\n  and started raising on them.\n- **Two never reach the model at all** \u2014 a default that lives in `__init__`\n  while the prose names the class, and a wholly new method. Both are recorded\n  in the manifest as the gaps in the tool that they are.\n\nThe first run of this harness scored 50%, not 59%, and the difference is not an\nimprovement to the tool: it is the corpus admitting it was wrong. Five cases\nasserted that code gaining an undocumented parameter is drift, which the\nverification prompt denies in as many words and the glossary settles against \u2014\ndrift is a section that is *inaccurate*, and a page that never mentioned the new\nparameter is merely silent. Three of those five are decoys now, and the two\nwhose pages make a claim the change falsifies stayed. `corpus/README.md` has\nthe argument in full. Nothing about the tool's behaviour changed, and no answer\nwas re-asked: the same recorded run is simply scored against ground truth that\nis no longer arguing with itself."
-    },
-    {
-      "id": "README.md#synclint > Measured so far > What embedding links buy",
-      "path": "README.md",
-      "heading_path": [
-        "synclint",
-        "Measured so far",
-        "What embedding links buy"
-      ],
-      "text": "The same harness measures link recall \u2014 how many planted section-chunk pairs\nthe index links at all \u2014 by name matching alone and with embeddings\n(text-embedding-3-small) added. The vectors are committed too, so this also\nreplays for free:\n\n| Links | Pairs linked | Planted pairs linked | Link recall | Suspects on cases | Suspects on decoys |\n| --- | --- | --- | --- | --- | --- |\n| name | 48 | 16 of 18 | 89% | 20 | 11 |\n| name + embedding \u2265 0.55 | 84 | 17 of 18 | 94% | 36 | 15 |\n\n**The delta is one case**, and it costs 36 more links and 20 more questions to\nthe model per corpus run, four of them on decoys. The pair gained is\n`shelf-capacity-default`: the prose describes a constructor default and names\nthe class, and the embedding puts it next to `Shelf.__init__` (0.597) where\nname matching cannot. The other miss, a newly added method, has no chunk at the base\nfor anything to link to.\n\nThe threshold sweep says the trade is lumpy rather than smooth \u2014 at 0.6 and above\nthe embeddings add links but not that case, and below 0.55 they add only suspects:\n\n| Threshold | Pairs linked | Link recall | Suspects on cases | Suspects on decoys |\n| --- | --- | --- | --- | --- |\n| 0.65 | 55 | 89% | 22 | 11 |\n| 0.60 | 61 | 89% | 24 | 12 |\n| 0.55 | 84 | 94% | 36 | 15 |\n| 0.50 | 124 | 94% | 48 | 23 |\n| 0.45 | 164 | 94% | 60 | 26 |\n\n0.55 is the 95th percentile of similarity over every section-chunk pair in the\ncorpus, chosen from that distribution rather than from the cases. Embedding the\ncorpus's 75 sections and chunks cost 2,400 tokens, **$0.000048**. On a corpus\nwhose pages name what they document, name matching was already doing nearly all\nthe work; embeddings are a narrow fix for one shape of miss, not a general\nimprovement.\n\nFindings are still scored over name links. The extra suspects have no recorded\nanswers yet, so whether the model then finds the shelf case is unmeasured."
-    },
-    {
-      "id": "README.md#synclint > Measured so far > What repairs look like",
-      "path": "README.md",
-      "heading_path": [
-        "synclint",
-        "Measured so far",
-        "What repairs look like"
-      ],
-      "text": "Every found case is repaired and validated, and the manifest carries ground\ntruth for each repair \u2014 text a correct one must say and text it must no longer\nsay \u2014 so validation, itself a model's judgement, is scored against something\nthat is not. Recording the 17 repair and validation answers cost **$0.0139**.\n\n| Repaired case | Shape | Outcome | Confidence | Ground truth | Text kept |\n| --- | --- | --- | --- | --- | --- |\n| write-json-path-renamed | renamed-parameter | proposed | 97% | correct | 98% |\n| renew-days-default | changed-default | not applied | \u2014 | not applied | \u2014 |\n| write-csv-columns-default | changed-default | proposed | 98% | correct | 94% |\n| matches-case-sensitive-default | changed-default | proposed | 98% | correct | 81% |\n| remove-returns-nothing | \u2014 | not applied | \u2014 | not applied | \u2014 |\n| load-drops-create-missing | \u2014 | outside the gate | \u2014 | correct | 54% |\n| parse-query-drops-or | \u2014 | not applied | \u2014 | not applied | \u2014 |\n| overdue-drops-grace | \u2014 | outside the gate | \u2014 | correct | 49% |\n| titles-drops-sort | \u2014 | outside the gate | \u2014 | correct | 55% |\n| is-valid-gains-isbn10 | \u2014 | outside the gate | \u2014 | incorrect | 83% |\n\n**Validation passed all seven it saw, one of them wrong. The gate stopped that\none.** The `is_valid` repair admits ten-digit ISBNs but keeps the advice to\nconvert them first, which the change made pointless. Its change rewrites a\nfunction body, which is not a shape the gate admits, so it is flagged. The\nprice: three correct repairs are flagged with it, because a removed capability\nis never one narrow shape. **Three proposed, three correct**, where validation\nalone proposed seven with one wrong.\n\n| Shape | Repairs | Correct | Proposed at \u2265 90% | Proposed and correct |\n| --- | --- | --- | --- | --- |\n| renamed-parameter | 1 | 1 (100%) | 1 | 1 |\n| changed-default | 3 | 2 (67%) | 2 | 2 |\n| outside the gate | 6 | 3 (50%) | 0 | 0 |\n\nThe rules did all of the work and the threshold none. The model gave the three\nrepairs inside the gate 97\u201398%, so any threshold up to 0.97 proposes the same\nthree. The gate's shapes agree with the manifest's hand-written kinds on all\nsixteen cases that change a chunk, though the rules were written from the ADR,\nnot from the corpus. Recording the three confidence answers cost **$0.0022**.\n\nThree repairs never reached validation because their quotes did not match the\nsection. Two quoted the whole section plus a newline it does not end with, and\none garbled the quote itself. Text kept is lowest where a capability was\nremoved, where the right repair deletes a clause, but it is also low because\nnine of the ten repairs quoted the whole section and rewrote it.\n\nThat last point was tested, and the idea failed. Telling the repair pass to\nquote only the wrong words, and refusing a whole-section quote in code, should\nhave shrunk the quotes. It did not: seven of ten still quoted everything, the\nguard refused all seven, and one repair in ten came out proposed and correct.\nThat cost $0.0114 and is reverted. Commit `68c98d0` keeps its answers, so the\nnumbers can be recomputed."
-    },
-    {
-      "id": "README.md#synclint > Measured so far > On a real repository",
-      "path": "README.md",
-      "heading_path": [
-        "synclint",
-        "Measured so far",
-        "On a real repository"
-      ],
-      "text": "The corpus was written by the same hand as the tool, so the same eleven-way\ntest was run on code nobody here wrote:\n[humanize](https://github.com/python-humanize/humanize) at `392aef7`, its\nREADME split into eighteen sections with sixteen name links\n(`validation/humanize/index.json`). Seven changes break a README example; four are decoys that break nothing. Each\nis a patch in `validation/humanize/changes/`, planted as its own branch off the\npinned commit, and analysed through the command line the Action calls. The\nanswers are committed, so `validation/humanize/run.sh` replays it for nothing.\n\n| Change | Should | Did | Repair |\n| --- | --- | --- | --- |\n| `naturalsize(binary=)` renamed `iec=` | find | found | proposed, 96%, correct |\n| `scientific` precision default 2 \u2192 3 | find | found | proposed, 99%, correct |\n| `precisedelta` format default `%0.2f` \u2192 `%0.1f` | find | found | proposed, 98%, correct |\n| `fractional(1.5)` gives `3/2`, not `1 1/2` | find | found | flagged (body), draft correct |\n| `naturaldate` gives ISO dates past five months | find | found | flagged (body), draft correct |\n| `apnumber` deleted | find | found, a disappearance | flagged (gone) |\n| `naturalday` renamed `natural_day` | find | found, a disappearance | flagged (gone) |\n| `intcomma` body rewritten, same output | nothing | nothing, cleared | \u2014 |\n| `intword(format=)` renamed, README never passes it | nothing | nothing, cleared | \u2014 |\n| `naturalsize` gains `separator=\" \"` | nothing | nothing, cleared | \u2014 |\n| a comment in `scientific` reworded | nothing | nothing, never asked | \u2014 |\n\n**Seven of seven found, no decoy flagged, three repairs proposed and all three\nright**, checked by hand against the patched code; the flags' drafts are in\nthe recorded answers. Twenty-two model calls cost **$0.0293**, against $0.30\nset aside.\n\nThe first run found five: both misses were the same gap, and neither was the\nmodel's fault. A deleted function had no chunk on the head side, so nothing was\ncompared and nothing asked. The rename was worse: `naturalday` vanishing was\nequally invisible, but `naturaldate`, which calls it, changed two lines \u2014 so\nthe section that calls `humanize.naturalday` three times was verified, against\n`naturaldate`, and rightly judged still accurate *about `naturaldate`*. The\nreport said one section was verified and none drifted, true and misleading.\n#10 closed it: both sections are now disappearances, found on replay without\na model call, and nothing else in the eleven results moved.\n\nTwo things went better than on the corpus. Every repair quoted only the lines\nit changed, where nine in ten corpus repairs quoted the whole section; these\npages are doctest examples, one claim per line, which likely explains it more\nthan anything synclint did. And name matching, wrong about every link on\nsynclint's own README, proposed no link here that was not right, because\nhumanize's prose names functions in full, as `humanize.naturalsize(...)`.\n\nIt ran from the command line, not as an installed Action: that needs a fork\nof humanize carrying these eleven pull requests, and the Action's own path\nfrom event to `analyse` is already exercised by the live run above.\n\n225 tests, mypy strict, no API spend in the suite \u2014 every test replays a recorded\nanswer or injects a fake."
+      "text": "name: synclint\n    on: pull_request\n    permissions:\n      contents: write        # the branch of repairs\n      pull-requests: write   # the comment, and the pull request of repairs\n    jobs:\n      synclint:\n        runs-on: ubuntu-latest\n        steps:\n          - uses: actions/checkout@v5\n            with:\n              ref: ${{ github.event.pull_request.head.sha }}  # not the merge commit\n              fetch-depth: 0   # both revisions; a shallow clone is refused\n          - uses: AnshChhikara001/synclint@v1\n            with:\n              api-key: ${{ secrets.OPENAI_API_KEY }}\n\nThe other inputs \u2014 `documentation-glob`, `model`, `confidence-threshold`,\n`ceiling` \u2014 default to the command line's defaults; `action.yml` describes each.\nThe key reaches the container as an environment variable, never an argument,\nbecause the runner prints a container's arguments. The head is checked out\nrather than GitHub's merge commit so the working tree is the code under review.\n\nTo keep a committed index fresh, copy `.github/workflows/index.yml`, installing\nsynclint with `pip install git+https://github.com/AnshChhikara001/synclint@v1`\nin place of `pip install .`. Without it every run builds its own index, which\ncosts seconds and no money."
     },
     {
       "id": "README.md#synclint > Limitations",
@@ -6036,7 +6083,7 @@
         "synclint",
         "Limitations"
       ],
-      "text": "- **Two in five planted cases still go unfound.** Nothing here is tuned: the\n  figures above are the first measurement, taken at low reasoning effort on the\n  cheapest model, and a renamed parameter \u2014 the easiest drift there is \u2014 is\n  found one time in five. Whether the effort or the prompt is to blame is a\n  question the harness can now answer for two cents.\n- **Name matching is permissive.** It costs nothing on the corpus, whose pages\n  are short and name what they document, but pointed at this repository every\n  link it proposes is wrong \u2014 `id`, `write`, `spend` and `git` all match as\n  ordinary English words in prose. The 100% above is precision over findings on\n  a well-behaved corpus, and it is not a claim about links in general.\n- **Embedding links are costly for what they add.** One planted pair gained for\n  20 more suspects per corpus run, on one small corpus with one embedding model.\n  The threshold was set on this corpus and may not transfer.\n- **A default declared in a constructor is unreachable by name.** The default\n  lives in `__init__` while the prose names the class. Embedding links reach the\n  corpus's one example; whether they reach it in general is unmeasured.\n- **A chunk the change adds is invisible.** Only chunks that existed before\n  the change are compared, so new code nothing documents yet raises nothing,\n  and a page claiming to list everything is not caught falling out of date.\n- **Sections are read at the base.** The index, committed or built for the\n  run, describes the base, so a pull request that changes a function and fixes\n  its documentation in the same pull request has the section checked as it read\n  before the fix, and can be told to fix what it already fixed. Before #11 the\n  Action indexed the head instead, and missed every disappearance.\n- **Freshness is judged by file, not by what the index holds.** Any change to a\n  Python or documentation file since it was built counts as out of date, a function\n  body included, so on a busy branch the fallback runs more often than it has\n  to. The rebuild commit also loses a race with a push that lands while it\n  runs, and the next pull request builds its own until the following rebuild.\n- **The fallback links by name only.** A committed index built with `--embed`\n  is replaced, when out of date, by one without its embedding links.\n- **The workflow assumes the default documentation globs.** Its path filter\n  and its `index` step name them; a repository with its own has to change both,\n  or every run builds its own index.\n- **The rebuild pushes to main.** A branch protection rule that refuses the\n  workflow's token leaves the index to fall behind, and every run builds its\n  own.\n- **An index does not record which synclint built it.** One built before a\n  change to how chunks or links are made still reads as current.\n- **The fallback reads the base through `git archive`,** so documentation a\n  repository marks `export-ignore`, and anything in a submodule, is missing\n  from an index built for a run.\n- **A disappearance is only as good as the name link behind it.** It is never\n  put to a model, so a deleted method called `write` would flag every section\n  that uses the word. A move is followed only when it is unambiguous and keeps\n  the qualified name: a function renamed, or moved into a class, is reported\n  gone, and a rename is also its new name's first appearance, which nothing\n  links to.\n- **Validation grades the same model's work.** It refused none of the seven\n  repairs it saw, one of them wrong. The gate caught that one here, but the\n  gate cannot catch a wrong repair of an eligible shape, and the ground truth\n  that judges it is hand-written for seventeen sections.\n- **The calibration table is four repairs deep inside the gate.** Nothing about\n  whether 90% from the model means 90% right can be read from it yet, and the\n  model's confidence did not vary enough to test the threshold at all.\n- **The gate is narrow on purpose.** Every removed capability is flagged, even\n  when the repair is right, and a flagged finding outside the gate still pays\n  for a repair and its validation so the reviewer has a rewrite to start from.\n- **A repair rewrites the whole section.** The model will not quote small at\n  low reasoning effort, even when told to, so byte-identity outside the edits\n  holds only in name. Text kept measures the damage; nothing bounds it.\n- **Quotes must match exactly.** Three of ten repairs were lost to that, two to\n  a trailing newline.\n- **Pull requests from forks and from Dependabot go unreviewed.** GitHub gives\n  their `pull_request` runs no Actions secrets, so there is no key; the Action\n  warns and exits cleanly rather than failing their checks. `pull_request_target`\n  would reach them, and is not the documented trigger because the workflow\n  around the Action would then be one careless step from running a stranger's\n  code with the repository's key (ADR-0006). Under it, repairs degrade to\n  diffs in the comment, as they do for a token GitHub answers 403.\n- **The repair pull request triggers the workflow too.** GitHub holds that\n  run for approval, since the Actions bot opened it; approved, it would find no\n  code changed and add a comment saying so.\n- **The image is built on every run**, not pulled from a registry: 95MB\n  compressed and 436MB unpacked, of which git's layer is 92MB and numpy 68MB.\n- **The repair branch is rebuilt on every push.** Repairs are recomputed\n  against the new head, so a human's amendment to `synclint/repairs-N` is\n  overwritten, and a repair pull request stays open after a push that leaves\n  nothing to repair.\n\n`CONTEXT.md` is the glossary; `docs/adr/` holds the decisions and what was\nrejected."
+      "text": "- **Python only.** Chunks come from the standard library's `ast` (ADR-0001); a\n  change in any other language raises nothing.\n- **Docstrings are not checked** (ADR-0004). Documentation means markdown under\n  the configured globs. A docstring is part of the chunk it documents, and\n  drift between a thing and a part of itself is a different problem. This is a\n  scope boundary, not a gap to close.\n- **Pull requests from forks and from Dependabot go unreviewed.** GitHub gives\n  their `pull_request` runs no secrets, so there is no key; the Action warns and\n  exits cleanly rather than failing their checks. `pull_request_target` would\n  reach them, with repairs degraded to diffs in the comment, and is not the\n  documented trigger because the workflow around the\n  Action would then be one careless step from running a stranger's code with\n  the repository's key (ADR-0006).\n- **Two in five planted cases go unfound**, and a renamed parameter, the easiest\n  drift there is, is found one time in five. Whether reasoning effort or the\n  prompt is to blame is untested.\n- **Name matching is permissive.** It costs nothing on the corpus and humanize,\n  whose pages name what they document, but pointed at this repository every\n  link it proposes is wrong \u2014 `id`, `write`, `spend` and `git` all match as\n  ordinary English. The 100% is precision over findings on well-behaved pages,\n  not a claim about links in general.\n- **Embedding links are costly for what they add**: one planted pair for 20\n  more suspects per run, on one small corpus with one embedding model. The\n  threshold was set on this corpus and may not transfer.\n- **A default declared in a constructor is unreachable by name.** Embedding\n  links reach the corpus's one example; whether they reach it in general is\n  unmeasured. A chunk the change adds is invisible too: only code that existed before the change is\n  compared, so a page claiming to list everything is not caught falling behind.\n- **A disappearance is only as good as the name link behind it.** It is never\n  put to a model, so a deleted method called `write` would flag every section\n  using the word. A move is followed only when it is unambiguous and keeps the\n  qualified name: a function renamed, or moved into a class, is reported gone.\n- **Validation grades the same model's work.** It refused none of the seven\n  repairs it saw, one of them wrong. The gate caught that one, but cannot catch\n  a wrong repair of an eligible shape, and the ground truth that judges repairs\n  is hand-written for seventeen sections.\n- **The calibration table is four repairs deep inside the gate**, and the\n  model's confidence did not vary enough to test the threshold at all.\n- **The gate is narrow on purpose.** Every removed capability is flagged even\n  when the repair is right, and a flagged finding still pays for a repair and\n  its validation so the reviewer has a draft.\n- **A repair rewrites the whole section.** At low reasoning effort the model\n  will not quote small even when told to, so byte-identity outside the edits\n  holds only in name; text kept measures the damage and nothing bounds it.\n  Quotes must also match exactly, and three of ten repairs were lost to that.\n- **Sections are read at the base.** A pull request that changes a function and\n  fixes its documentation together has the section checked as it read before\n  the fix, and can be told to fix what it already fixed.\n- **The committed index goes out of date more often than it needs to.** Any\n  Python or documentation file that differs since it was built counts, whether\n  or not the difference touches a chunk or a section, so the fallback runs more\n  often than it has to, and the fallback links by name only. The\n  rebuild workflow assumes the default globs, pushes to main (a protection rule\n  that refuses its token leaves the index behind), and loses a race with a push\n  that lands while it runs. An index does not record which synclint built it.\n  The fallback reads the base through `git archive`, so `export-ignore` files\n  and submodules are missing from it.\n- **The repair branch is rebuilt on every push**, so a human's amendment to\n  `synclint/repairs-N` is overwritten, and a repair pull request stays open\n  after a push that leaves nothing to repair. It also triggers the workflow\n  itself, which GitHub holds for approval.\n- **The image is built on every run**, not pulled from a registry: 95MB\n  compressed, about 12 seconds cold on a laptop.\n\n`CONTEXT.md` is the glossary; `docs/adr/` holds the decisions and what was\nrejected; `corpus/README.md` describes every case and decoy."
     },
     {
       "id": "docs/adr/0001-python-only-via-stdlib-ast.md#Parse Python only, using the standard library `ast`",
@@ -6090,267 +6137,1092 @@
   "links": [
     {
       "section": "README.md#synclint",
-      "chunk": "src/synclint/github.py::GitHub",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint",
-      "chunk": "tests/test_confidence.py::change",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > How it works",
-      "chunk": "src/synclint/analyse.py::analyse",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > How it works",
-      "chunk": "src/synclint/github.py::GitHub",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > How it works",
-      "chunk": "src/synclint/index.py::build_index",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > How it works",
-      "chunk": "src/synclint/publish.py::publish",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > How it works",
-      "chunk": "tests/test_action.py::git",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > How it works",
-      "chunk": "tests/test_analyse.py::git",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > How it works",
-      "chunk": "tests/test_confidence.py::change",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > How it works",
-      "chunk": "tests/test_index_lifecycle.py::git",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "corpus/base/bookshelf/search.py::matches",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "corpus/cases/matches-case-sensitive-default/bookshelf/search.py::matches",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "corpus/cases/parse-query-drops-or/bookshelf/search.py::matches",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "corpus/decoys/matches-hoists-its-closure/bookshelf/search.py::matches",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "corpus/decoys/queries-reflowed/bookshelf/search.py::matches",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/__main__.py::main",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/action.py::command",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/action.py::main",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/analyse.py::Repair",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/analyse.py::Repair.diff",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/analyse.py::analyse",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/changes.py::ChunkChange.chunk",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/changes.py::VanishedChunk.chunk",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
       "chunk": "src/synclint/embeddings.py::EmbeddingClient.calls",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/embeddings.py::EmbeddingClient.tokens",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/embeddings.py::EmbeddingClient.dollars",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/git.py::run",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint",
       "chunk": "src/synclint/github.py::GitHub",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
+      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.merge",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > How it works",
+      "chunk": "src/synclint/__main__.py::main",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > How it works",
+      "chunk": "src/synclint/action.py::main",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > How it works",
+      "chunk": "src/synclint/analyse.py::Repair",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > How it works",
+      "chunk": "src/synclint/analyse.py::analyse",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > How it works",
+      "chunk": "src/synclint/changes.py::ChunkChange.chunk",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > How it works",
+      "chunk": "src/synclint/changes.py::VanishedChunk.chunk",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > How it works",
+      "chunk": "src/synclint/embeddings.py::EmbeddingClient.tokens",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > How it works",
+      "chunk": "src/synclint/embeddings.py::EmbeddingClient.dollars",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > How it works",
+      "chunk": "src/synclint/git.py::run",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > How it works",
+      "chunk": "src/synclint/github.py::GitHub",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > How it works",
       "chunk": "src/synclint/index.py::Index",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "src/synclint/index.py::build_index",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/index.py::IndexUsed.describe",
+      "section": "README.md#synclint > How it works",
+      "chunk": "src/synclint/model.py::ModelClient.spend",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/model.py::Spend",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "src/synclint/publish.py::summary",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "src/synclint/publish.py::publish",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "src/synclint/repair.py::repair",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "src/synclint/score.py::RepairOutcome.proposed",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/score.py::Linking.planted",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
-      "chunk": "src/synclint/score.py::_Branch.planted",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_action.py::git",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_action.py::commit",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
-      "chunk": "tests/test_action.py::event",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_analyse.py::git",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_analyse.py::commit",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
+      "chunk": "tests/test_build_index.py::embeddings",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_confidence.py::change",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_index_lifecycle.py::git",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_index_lifecycle.py::commit",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_publish.py::finding",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_publish.py::repaired",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_publish.py::flagged",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_publish.py::report",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_publish.py::gone",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > How it works",
       "chunk": "tests/test_publish.py::FakeGitHub.bodies",
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > What works today",
+      "section": "README.md#synclint > Measured results",
+      "chunk": "src/synclint/git.py::run",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results",
+      "chunk": "src/synclint/score.py::Score.recall",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results",
+      "chunk": "src/synclint/score.py::Linking.recall",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results",
+      "chunk": "tests/test_score.py::replay",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/base/bookshelf/importer.py::read_csv",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/base/bookshelf/shelves.py::Shelf.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/cases/read-csv-path-renamed/bookshelf/importer.py::read_csv",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/cases/read-csv-skip-invalid-default/bookshelf/importer.py::read_csv",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/cases/shelf-capacity-default/bookshelf/shelves.py::Shelf.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/cases/titles-drops-sort/bookshelf/shelves.py::Shelf.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/decoys/read-csv-gains-encoding/bookshelf/importer.py::read_csv",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "corpus/decoys/writers-reflowed/bookshelf/importer.py::read_csv",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/analyse.py::suspects",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/changes.py::ChunkChange.chunk",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/changes.py::VanishedChunk.chunk",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/confidence.py::rate",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/corpus.py::Decoy",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/embeddings.py::EmbeddingClient.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/embeddings.py::RecordedOnly.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/embeddings.py::OpenAIEmbedder.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/git.py::run",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/github.py::GitHubError.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/github.py::GitHub.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/model.py::ModelClient.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/model.py::RecordedOnly.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/model.py::OpenAIModel.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/score.py::Score.decoys",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/score.py::Linking.planted",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "src/synclint/score.py::_Branch.planted",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "tests/test_analyse.py::ScriptedModel.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "tests/test_confidence.py::change",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "tests/test_corpus.py::shipped",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "tests/test_embeddings.py::FakeEmbedder.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "tests/test_model_client.py::FakeModel.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "tests/test_publish.py::finding",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "tests/test_publish.py::FakeGitHub.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "tests/test_score.py::DecidingModel.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
       "chunk": "tests/test_score.py::planted",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "tests/test_score.py::scored",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On the fixture corpus",
+      "chunk": "tests/test_score.py::shipped",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.add",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/base/bookshelf/shelves.py::Shelf",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/base/bookshelf/shelves.py::Shelf.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/base/bookshelf/shelves.py::Shelf.add",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.add",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.add",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.add",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.add",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/shelf-capacity-default/bookshelf/shelves.py::Shelf",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/shelf-capacity-default/bookshelf/shelves.py::Shelf.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/shelf-capacity-default/bookshelf/shelves.py::Shelf.add",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/titles-drops-sort/bookshelf/shelves.py::Shelf",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/titles-drops-sort/bookshelf/shelves.py::Shelf.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/cases/titles-drops-sort/bookshelf/shelves.py::Shelf.add",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.add",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.add",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.add",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/analyse.py::suspects",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/changes.py::ChunkChange.chunk",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/changes.py::VanishedChunk.chunk",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/embeddings.py::EmbeddingClient.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/embeddings.py::EmbeddingClient.tokens",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/embeddings.py::RecordedOnly.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/embeddings.py::OpenAIEmbedder.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/git.py::run",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/github.py::GitHubError.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/github.py::GitHub.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/links.py::Link",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/model.py::ModelClient.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/model.py::RecordedOnly.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/model.py::OpenAIModel.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/score.py::Score.recall",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/score.py::Score.decoys",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/score.py::Linking.planted",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/score.py::Linking.recall",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "src/synclint/score.py::_Branch.planted",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "tests/test_analyse.py::ScriptedModel.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "tests/test_build_index.py::embeddings",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "tests/test_embeddings.py::FakeEmbedder.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "tests/test_model_client.py::FakeModel.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "tests/test_publish.py::FakeGitHub.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "tests/test_score.py::DecidingModel.__init__",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "tests/test_score.py::planted",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What embedding links buy",
+      "chunk": "tests/test_score.py::scored",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.remove",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/base/bookshelf/isbn.py::is_valid",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/base/bookshelf/loans.py::renew",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/base/bookshelf/loans.py::overdue",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/base/bookshelf/search.py::matches",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/base/bookshelf/shelves.py::Shelf.titles",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/base/bookshelf/storage.py::load",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.remove",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.remove",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.remove",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/is-valid-gains-isbn10/bookshelf/isbn.py::is_valid",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/lend-borrower-renamed/bookshelf/loans.py::renew",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/lend-borrower-renamed/bookshelf/loans.py::overdue",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/load-drops-create-missing/bookshelf/storage.py::load",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/matches-case-sensitive-default/bookshelf/search.py::matches",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/normalise-raw-renamed/bookshelf/isbn.py::is_valid",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/overdue-drops-grace/bookshelf/loans.py::renew",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/overdue-drops-grace/bookshelf/loans.py::overdue",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/parse-query-drops-or/bookshelf/search.py::matches",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.remove",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/renew-days-default/bookshelf/loans.py::renew",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/renew-days-default/bookshelf/loans.py::overdue",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/shelf-capacity-default/bookshelf/shelves.py::Shelf.titles",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/cases/titles-drops-sort/bookshelf/shelves.py::Shelf.titles",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.remove",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/decoys/is-valid-weights-hoisted/bookshelf/isbn.py::is_valid",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/decoys/isbn-checksum-explained/bookshelf/isbn.py::is_valid",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/decoys/load-moves-to-its-own-module/bookshelf/loading.py::load",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/decoys/loans-dates-explained/bookshelf/loans.py::renew",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/decoys/loans-dates-explained/bookshelf/loans.py::overdue",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/decoys/matches-hoists-its-closure/bookshelf/search.py::matches",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.remove",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/decoys/queries-reflowed/bookshelf/search.py::matches",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.remove",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/decoys/save-extracts-the-backup/bookshelf/storage.py::load",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "corpus/decoys/save-gains-compression/bookshelf/storage.py::load",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "src/synclint/changes.py::ChunkChange.chunk",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "src/synclint/changes.py::VanishedChunk.chunk",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "src/synclint/confidence.py::Shape",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "src/synclint/repair.py::repair",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "src/synclint/score.py::RepairOutcome.proposed",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "tests/test_action.py::commit",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "tests/test_analyse.py::commit",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "tests/test_build_index.py::write",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "tests/test_confidence.py::change",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "tests/test_corpus.py::write",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "tests/test_index_lifecycle.py::commit",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "tests/test_publish.py::flagged",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "tests/test_score.py::write",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > What repairs look like",
+      "chunk": "tests/test_score.py::scored",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.find",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/action.py::command",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/analyse.py::Repair",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/analyse.py::analyse",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/analyse.py::disappearances",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/changes.py::ChunkChange.chunk",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/changes.py::VanishedChunk.chunk",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/embeddings.py::EmbeddingClient.calls",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/git.py::run",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/model.py::ModelClient.spend",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/repair.py::repair",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/score.py::RepairOutcome.proposed",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/score.py::Score.precision",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "src/synclint/score.py::Score.decoys",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "tests/test_action.py::event",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "tests/test_confidence.py::change",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "tests/test_publish.py::flagged",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "tests/test_publish.py::gone",
+      "mechanism": "name"
+    },
+    {
+      "section": "README.md#synclint > Measured results > On a real repository",
+      "chunk": "tests/test_score.py::replay",
       "mechanism": "name"
     },
     {
@@ -6360,17 +7232,7 @@
     },
     {
       "section": "README.md#synclint > Using it",
-      "chunk": "src/synclint/__main__.py::main",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Using it",
       "chunk": "src/synclint/action.py::command",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Using it",
-      "chunk": "src/synclint/action.py::main",
       "mechanism": "name"
     },
     {
@@ -6444,923 +7306,8 @@
       "mechanism": "name"
     },
     {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/base/bookshelf/importer.py::read_csv",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/base/bookshelf/shelves.py::Shelf.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/cases/read-csv-path-renamed/bookshelf/importer.py::read_csv",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/cases/read-csv-skip-invalid-default/bookshelf/importer.py::read_csv",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/cases/shelf-capacity-default/bookshelf/shelves.py::Shelf.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/cases/titles-drops-sort/bookshelf/shelves.py::Shelf.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/decoys/read-csv-gains-encoding/bookshelf/importer.py::read_csv",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "corpus/decoys/writers-reflowed/bookshelf/importer.py::read_csv",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/analyse.py::suspects",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/changes.py::ChunkChange.chunk",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/changes.py::VanishedChunk.chunk",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/embeddings.py::EmbeddingClient.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/embeddings.py::EmbeddingClient.replaying",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/embeddings.py::RecordedOnly.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/embeddings.py::OpenAIEmbedder.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/git.py::run",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/github.py::GitHubError.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/github.py::GitHub.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/model.py::ModelClient.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/model.py::ModelClient.replaying",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/model.py::RecordedOnly.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/model.py::OpenAIModel.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/score.py::Score.recall",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "src/synclint/score.py::Linking.recall",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "tests/test_analyse.py::ScriptedModel.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "tests/test_confidence.py::change",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "tests/test_corpus.py::shipped",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "tests/test_embeddings.py::FakeEmbedder.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "tests/test_model_client.py::FakeModel.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "tests/test_publish.py::finding",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "tests/test_publish.py::FakeGitHub.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "tests/test_score.py::DecidingModel.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "tests/test_score.py::scored",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far",
-      "chunk": "tests/test_score.py::shipped",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/base/bookshelf/shelves.py::Shelf",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/base/bookshelf/shelves.py::Shelf.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/base/bookshelf/shelves.py::Shelf.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/shelf-capacity-default/bookshelf/shelves.py::Shelf",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/shelf-capacity-default/bookshelf/shelves.py::Shelf.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/shelf-capacity-default/bookshelf/shelves.py::Shelf.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/titles-drops-sort/bookshelf/shelves.py::Shelf",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/titles-drops-sort/bookshelf/shelves.py::Shelf.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/cases/titles-drops-sort/bookshelf/shelves.py::Shelf.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/analyse.py::suspects",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/changes.py::ChunkChange.chunk",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/changes.py::VanishedChunk.chunk",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/embeddings.py::EmbeddingClient.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/embeddings.py::EmbeddingClient.tokens",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/embeddings.py::RecordedOnly.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/embeddings.py::OpenAIEmbedder.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/git.py::run",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/github.py::GitHubError.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/github.py::GitHub.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/links.py::Link",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/model.py::ModelClient.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/model.py::RecordedOnly.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/model.py::OpenAIModel.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/score.py::Score.recall",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/score.py::Linking.planted",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/score.py::Linking.recall",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "src/synclint/score.py::_Branch.planted",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "tests/test_analyse.py::ScriptedModel.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "tests/test_build_index.py::embeddings",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "tests/test_embeddings.py::FakeEmbedder.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "tests/test_model_client.py::FakeModel.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "tests/test_publish.py::FakeGitHub.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "tests/test_score.py::DecidingModel.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "tests/test_score.py::planted",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What embedding links buy",
-      "chunk": "tests/test_score.py::scored",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.remove",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/base/bookshelf/isbn.py::is_valid",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/base/bookshelf/loans.py::renew",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/base/bookshelf/loans.py::overdue",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/base/bookshelf/search.py::matches",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/base/bookshelf/shelves.py::Shelf.titles",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/base/bookshelf/storage.py::load",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.remove",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.remove",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.remove",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/is-valid-gains-isbn10/bookshelf/isbn.py::is_valid",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/lend-borrower-renamed/bookshelf/loans.py::renew",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/lend-borrower-renamed/bookshelf/loans.py::overdue",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/load-drops-create-missing/bookshelf/storage.py::load",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/matches-case-sensitive-default/bookshelf/search.py::matches",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/normalise-raw-renamed/bookshelf/isbn.py::is_valid",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/overdue-drops-grace/bookshelf/loans.py::renew",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/overdue-drops-grace/bookshelf/loans.py::overdue",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/parse-query-drops-or/bookshelf/search.py::matches",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.remove",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/renew-days-default/bookshelf/loans.py::renew",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/renew-days-default/bookshelf/loans.py::overdue",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/shelf-capacity-default/bookshelf/shelves.py::Shelf.titles",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/cases/titles-drops-sort/bookshelf/shelves.py::Shelf.titles",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.remove",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/decoys/is-valid-weights-hoisted/bookshelf/isbn.py::is_valid",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/decoys/isbn-checksum-explained/bookshelf/isbn.py::is_valid",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/decoys/load-moves-to-its-own-module/bookshelf/loading.py::load",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/decoys/loans-dates-explained/bookshelf/loans.py::renew",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/decoys/loans-dates-explained/bookshelf/loans.py::overdue",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/decoys/matches-hoists-its-closure/bookshelf/search.py::matches",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.remove",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/decoys/queries-reflowed/bookshelf/search.py::matches",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.remove",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/decoys/save-extracts-the-backup/bookshelf/storage.py::load",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "corpus/decoys/save-gains-compression/bookshelf/storage.py::load",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "src/synclint/changes.py::ChunkChange.chunk",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "src/synclint/changes.py::VanishedChunk.chunk",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "src/synclint/confidence.py::Shape",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "src/synclint/repair.py::repair",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "src/synclint/score.py::RepairOutcome.proposed",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "tests/test_build_index.py::write",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "tests/test_confidence.py::change",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "tests/test_corpus.py::write",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "tests/test_publish.py::repaired",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "tests/test_publish.py::flagged",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "tests/test_score.py::write",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > What repairs look like",
-      "chunk": "tests/test_score.py::scored",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/action.py::command",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/analyse.py::Repair",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/analyse.py::analyse",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/analyse.py::disappearances",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/changes.py::ChunkChange.chunk",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/changes.py::VanishedChunk.chunk",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/embeddings.py::EmbeddingClient.calls",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/git.py::run",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/model.py::ModelClient.spend",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/repair.py::repair",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/score.py::RepairOutcome.proposed",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/score.py::Score.precision",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/score.py::Linking.planted",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "src/synclint/score.py::_Branch.planted",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "tests/test_action.py::commit",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "tests/test_action.py::event",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "tests/test_analyse.py::commit",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "tests/test_index_lifecycle.py::commit",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "tests/test_publish.py::flagged",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "tests/test_publish.py::report",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "tests/test_publish.py::gone",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "tests/test_score.py::planted",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Measured so far > On a real repository",
-      "chunk": "tests/test_score.py::replay",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
       "section": "README.md#synclint > Limitations",
       "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/base/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/base/bookshelf/shelves.py::Shelf.__init__",
       "mechanism": "name"
     },
     {
@@ -7370,22 +7317,7 @@
     },
     {
       "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
       "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/cases/catalogue-drops-count/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.__init__",
       "mechanism": "name"
     },
     {
@@ -7395,27 +7327,7 @@
     },
     {
       "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/cases/catalogue-gains-merge/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
       "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/cases/find-query-renamed/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.__init__",
       "mechanism": "name"
     },
     {
@@ -7425,22 +7337,7 @@
     },
     {
       "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/cases/remove-returns-nothing/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/cases/shelf-capacity-default/bookshelf/shelves.py::Shelf.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
       "chunk": "corpus/cases/shelf-capacity-default/bookshelf/shelves.py::Shelf.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/cases/titles-drops-sort/bookshelf/shelves.py::Shelf.__init__",
       "mechanism": "name"
     },
     {
@@ -7450,22 +7347,7 @@
     },
     {
       "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
       "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/decoys/find-gains-author-filter/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.__init__",
       "mechanism": "name"
     },
     {
@@ -7475,22 +7357,7 @@
     },
     {
       "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/decoys/queries-reflowed/bookshelf/catalogue.py::Catalogue.find",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
       "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.add",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "corpus/decoys/recent-sorts-by-a-named-key/bookshelf/catalogue.py::Catalogue.find",
       "mechanism": "name"
     },
     {
@@ -7525,47 +7392,7 @@
     },
     {
       "section": "README.md#synclint > Limitations",
-      "chunk": "src/synclint/embeddings.py::Embedder.embed",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "src/synclint/embeddings.py::EmbeddingClient.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "src/synclint/embeddings.py::EmbeddingClient.embed",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "src/synclint/embeddings.py::RecordedOnly.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "src/synclint/embeddings.py::RecordedOnly.embed",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "src/synclint/embeddings.py::OpenAIEmbedder.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "src/synclint/embeddings.py::OpenAIEmbedder.embed",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
       "chunk": "src/synclint/git.py::run",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "src/synclint/github.py::GitHubError.__init__",
       "mechanism": "name"
     },
     {
@@ -7575,27 +7402,7 @@
     },
     {
       "section": "README.md#synclint > Limitations",
-      "chunk": "src/synclint/github.py::GitHub.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "src/synclint/model.py::ModelClient.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
       "chunk": "src/synclint/model.py::ModelClient.spend",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "src/synclint/model.py::RecordedOnly.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "src/synclint/model.py::OpenAIModel.__init__",
       "mechanism": "name"
     },
     {
@@ -7630,17 +7437,7 @@
     },
     {
       "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_action.py::commit",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
       "chunk": "tests/test_action.py::workflow",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_analyse.py::ScriptedModel.__init__",
       "mechanism": "name"
     },
     {
@@ -7650,22 +7447,7 @@
     },
     {
       "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_analyse.py::commit",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_analyse.py::start",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
       "chunk": "tests/test_build_index.py::write",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_build_index.py::TopicEmbedder.embed",
       "mechanism": "name"
     },
     {
@@ -7680,32 +7462,7 @@
     },
     {
       "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_embeddings.py::FakeEmbedder.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_embeddings.py::FakeEmbedder.embed",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
       "chunk": "tests/test_index_lifecycle.py::git",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_index_lifecycle.py::commit",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_index_lifecycle.py::start",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_model_client.py::FakeModel.__init__",
       "mechanism": "name"
     },
     {
@@ -7725,27 +7482,12 @@
     },
     {
       "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_publish.py::FakeGitHub.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
       "chunk": "tests/test_score.py::write",
       "mechanism": "name"
     },
     {
       "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_score.py::DecidingModel.__init__",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
       "chunk": "tests/test_score.py::planted",
-      "mechanism": "name"
-    },
-    {
-      "section": "README.md#synclint > Limitations",
-      "chunk": "tests/test_score.py::TopicEmbedder.embed",
       "mechanism": "name"
     },
     {
